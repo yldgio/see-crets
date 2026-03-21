@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for taking the time to report a bug. Please fill in as much detail as possible.
         
-        > ⚠️ **Security bug?** Do NOT use this form. See [SECURITY.md](../SECURITY.md) instead.
+        > ⚠️ **Security bug?** Do NOT use this form. See [SECURITY.md](../../SECURITY.md) instead.
 
   - type: dropdown
     id: os

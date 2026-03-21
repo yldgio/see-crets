@@ -48,12 +48,12 @@ The following are in scope for security reports:
 - Any path that exports a secret value into the process environment beyond a single subprocess lifetime
 - Output scrubbing bypasses — a secret value passing through to tool output unredacted
 - Injection vulnerabilities in placeholder substitution (`{{SECRET:key}}`)
-- OS vault backend vulnerabilities (Keychain, Credential Manager, libsecret/pass)
+- Bugs in **see-crets' integration with** OS vault backends — e.g. incorrect API usage, missing error handling, or misuse of Keychain/Credential Manager/libsecret APIs that could expose secret values
 
 ### Out of Scope
 
+- Vulnerabilities **in the underlying OS vault implementations themselves** (Keychain, Credential Manager, libsecret, pass) — report those to Apple, Microsoft, or your Linux distribution vendor
 - Issues requiring physical access to the machine
-- Vulnerabilities in underlying OS vault implementations (Keychain, Credential Manager) — report those to Apple/Microsoft/distribution vendors
 - Social engineering the user to reveal secrets manually
 - Secrets disclosed via a separate, unrelated application on the same machine
 

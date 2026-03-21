@@ -5,6 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue)]()
+[![Status](https://img.shields.io/badge/status-pre--release%20%2F%20design%20phase-orange)]()
+
+> **⚠️ Pre-release:** see-crets is in active design and early development. The architecture and CLI surface described below are finalised and implementation is underway — no release is available yet. Star or watch the repo to follow progress.
 
 ---
 
@@ -35,14 +38,16 @@ Neither is acceptable.
 
 ---
 
-## Features
+## Planned Features
+
+> These capabilities are designed and specified — implementation is in progress. See the [Roadmap](#roadmap) for phase status.
 
 - 🔐 **OS-native storage** — Keychain (macOS), Credential Manager (Windows), libsecret/pass (Linux). No files written to disk.
-- 🕵️ **Output scrubbing** — If a secret leaks into stdout/stderr, it's replaced with `[REDACTED]` before the LLM sees it.
+- 🕵️ **Output scrubbing** — If a secret leaks into stdout/stderr, it will be replaced with `[REDACTED]` before the LLM sees it.
 - 💉 **Two injection strategies** — Placeholder substitution (`{{SECRET:key}}`) and subprocess-scoped env injection (`VAR=value cmd`).
 - 🧰 **Three runtimes** — OpenCode, GitHub Copilot CLI, Claude Code.
 - 📈 **Graduated enforcement** — Start with a single Markdown file (Tier 1). Add a plugin (Tier 2). Add hooks for full enforcement (Tier 3).
-- 🔑 **Auto-namespacing** — Secrets are automatically scoped to your project via `git rev-parse --show-toplevel`.
+- 🔑 **Auto-namespacing** — Secrets will be automatically scoped to your project via `git rev-parse --show-toplevel`.
 - ⚙️ **Built-in env map** — 20+ common service keys (`github-token → GITHUB_TOKEN`, `openai-api-key → OPENAI_API_KEY`, etc.) with per-project overrides.
 
 ---
@@ -57,7 +62,9 @@ Neither is acceptable.
 
 ---
 
-## Quick Start
+## Quick Start (planned)
+
+> **Not yet released.** The steps below reflect the intended installation experience once the CLI is published. Follow the repo to be notified when v0.1 ships.
 
 ### Tier 1 — Skill only (2 minutes)
 
@@ -123,7 +130,9 @@ cp hooks/hooks.json $env:APPDATA\agent-hooks\
 
 ---
 
-## CLI Reference
+## CLI Reference (planned)
+
+> Commands below reflect the finalised CLI design. Implementation begins in Phase 1.
 
 ### `see-crets set <key>`
 
@@ -203,9 +212,9 @@ see-crets set db-pass --project staging # → staging/db-pass (explicit override
 
 ---
 
-## Injection Strategies
+## Injection Strategies (planned)
 
-Two complementary methods ensure secret values never reach the LLM.
+Two complementary methods will ensure secret values never reach the LLM.
 
 ### Strategy A — Placeholder Substitution
 
