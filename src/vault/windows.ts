@@ -129,7 +129,7 @@ export class WindowsVaultBackend implements VaultBackend {
   readonly name = "Windows Credential Manager";
 
   async isAvailable(): Promise<boolean> {
-    const r = psRun("cmdkey /? 2>&1 | Out-Null");
+    const r = psRun("cmdkey /? 2>&1 | Out-Null; exit $LASTEXITCODE");
     return r.exitCode === 0;
   }
 
