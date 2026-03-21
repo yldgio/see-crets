@@ -21,6 +21,7 @@ function createMockBackend(
 
     async set(key, value) {
       if (/[\r\n]/.test(key)) throw new Error("key must not contain newlines");
+      if (key !== key.trim()) throw new Error("key must not have leading or trailing whitespace");
       store.set(key, value);
     },
 
@@ -121,12 +122,35 @@ describe("WindowsVaultBackend key validation", () => {
     await expect(backend.set("bad\rkey", "val")).rejects.toThrow("newline");
   });
 
+  it("set() rejects keys with leading whitespace", async () => {
+    await expect(backend.set(" leading-space", "val")).rejects.toThrow("whitespace");
+  });
+
+  it("set() rejects keys with trailing whitespace", async () => {
+    await expect(backend.set("trailing-space ", "val")).rejects.toThrow("whitespace");
+  });
+
   it("set() accepts keys with slashes and dashes", async () => {
-    // Validation should not throw for normal keys.
-    // The call will fail at the OS level (no credential store in test), but that's OK —
-    // we only care that key validation itself does not throw.
-    const result = backend.set("my-project/github-token", "val");
-    // Should not reject due to key validation (may reject due to OS, which is fine)
-    await result.catch(() => {});
+    // Use a validation-only mock to avoid writing to the OS credential store.
+    // The mock mirrors the same key restrictions as WindowsVaultBackend.set().
+    const validatingBackend: VaultBackend = {
+      name: backend.name,
+      async isAvailable() { return true; },
+      async set(key: string, _value: string) {
+        if (/[\r\n]/.test(key)) {
+          throw new Error("key must not contain newlines");
+        }
+        if (key !== key.trim()) {
+          throw new Error("key must not have leading or trailing whitespace");
+        }
+      },
+      async get(_key: string) { return null; },
+      async delete(_key: string) {},
+      async list(_prefix: string) { return []; },
+    };
+
+    await expect(
+      validatingBackend.set("my-project/github-token", "val"),
+    ).resolves.toBeUndefined();
   });
 });

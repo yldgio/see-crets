@@ -35,6 +35,24 @@ export async function askSecretSet(
   const qualifiedKey = rawKey.includes("/") ? rawKey : `${ns}/${rawKey}`;
 
   if (!process.stdin.isTTY) {
+    // In non-interactive mode, check if the key already exists in the vault.
+    // This is safe: we only inspect key names, never values.
+    try {
+      const backend = await detectBackend();
+      const prefix = qualifiedKey.includes("/")
+        ? qualifiedKey.slice(0, qualifiedKey.lastIndexOf("/") + 1)
+        : "";
+      const existing = await backend.list(prefix);
+      if (existing.includes(qualifiedKey)) {
+        const nsFromKey = qualifiedKey.includes("/")
+          ? qualifiedKey.slice(0, qualifiedKey.lastIndexOf("/"))
+          : ns;
+        return { stored: true, key: qualifiedKey, namespace: nsFromKey };
+      }
+    } catch {
+      // Vault unavailable in CI — fall through to instructions
+    }
+
     return {
       stored: false,
       key: qualifiedKey,
@@ -77,12 +95,25 @@ async function readMaskedInput(prompt: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const stdin = process.stdin;
 
-    const restoreAndResolve = (value: string) => {
+    const restoreRawMode = () => {
       if (isTTYWithRawMode(stdin)) {
         (stdin as NodeJS.ReadStream & { setRawMode: (mode: boolean) => void }).setRawMode(false);
       }
+    };
+
+    const restoreAndResolve = (value: string) => {
+      stdin.removeListener("data", handler);
+      stdin.removeListener("error", restoreAndReject);
+      restoreRawMode();
       process.stderr.write("\n");
       resolve(value);
+    };
+
+    const restoreAndReject = (err: Error) => {
+      stdin.removeListener("data", handler);
+      stdin.removeListener("error", restoreAndReject);
+      restoreRawMode();
+      reject(err);
     };
 
     if (isTTYWithRawMode(stdin)) {
@@ -93,23 +124,19 @@ async function readMaskedInput(prompt: string): Promise<string> {
 
     let value = "";
 
-    const handler = (chunk: string) => {
+    function handler(chunk: string) {
       for (const char of chunk) {
         switch (char) {
           case "\r":
           case "\n":
           case "\u0004": // EOT (Ctrl+D)
-            stdin.removeListener("data", handler);
             stdin.pause();
             restoreAndResolve(value);
             return;
 
           case "\u0003": // Ctrl+C
-            stdin.removeListener("data", handler);
             stdin.pause();
-            if (isTTYWithRawMode(stdin)) {
-              (stdin as NodeJS.ReadStream & { setRawMode: (mode: boolean) => void }).setRawMode(false);
-            }
+            restoreRawMode();
             process.stderr.write("\n^C\n");
             process.exit(1);
             break;
@@ -125,10 +152,10 @@ async function readMaskedInput(prompt: string): Promise<string> {
             }
         }
       }
-    };
+    }
 
     stdin.on("data", handler);
-    stdin.once("error", reject);
+    stdin.on("error", restoreAndReject);
   });
 }
 

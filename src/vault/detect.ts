@@ -27,7 +27,7 @@ export async function detectBackend(): Promise<VaultBackend> {
   }
 
   throw new Error(
-    `Linux vault backend is not yet implemented (Phase 2). ` +
+    `Vault backend is not yet implemented for this platform (Phase 2). ` +
       `Detected platform: ${platform}`
   );
 }

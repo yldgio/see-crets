@@ -137,6 +137,9 @@ export class WindowsVaultBackend implements VaultBackend {
     if (/[\r\n]/.test(key)) {
       throw new Error(`Invalid key '${key}': key must not contain newlines`);
     }
+    if (key !== key.trim()) {
+      throw new Error(`Invalid key '${key}': key must not have leading or trailing whitespace`);
+    }
     const target = psEscape(`${TARGET_PREFIX}${key}`);
     const script = `
 Add-Type -TypeDefinition @"
@@ -203,7 +206,6 @@ $targets | ForEach-Object { Write-Output $_ }
     const prefixStrip = TARGET_PREFIX;
     return r.stdout
       .split(/\r?\n/)
-      .map((l) => l.trim())
       .filter((l) => l.startsWith(prefixStrip))
       .map((l) => l.slice(prefixStrip.length));
   }

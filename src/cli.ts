@@ -33,7 +33,6 @@ Usage:
 
 Options:
   --project <name>           Override the project namespace (default: git root basename)
-  --json                     Output machine-readable JSON (default for set/list/detect)
 `);
   process.exit(1);
 }
