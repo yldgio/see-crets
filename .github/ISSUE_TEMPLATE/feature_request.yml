@@ -1,0 +1,61 @@
+name: Feature Request
+description: Suggest a new feature or improvement for see-crets
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, please check the [roadmap](../../README.md#roadmap) to see if this is already planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem does this solve? What can't you do today?
+      placeholder: "When I... I can't... because..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you've tried or other approaches you considered?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which area does this affect?
+      options:
+        - CLI commands
+        - Vault backend (macOS / Windows / Linux)
+        - Injection / placeholder substitution
+        - Output scrubbing
+        - Env var mapping
+        - OpenCode plugin
+        - Copilot CLI plugin
+        - Claude Code plugin
+        - Shell hooks (Tier 3)
+        - Security model
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the roadmap and this is not already planned
+          required: true
+        - label: I searched existing issues and this is not a duplicate
+          required: true
