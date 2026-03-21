@@ -166,7 +166,7 @@ Write-Output $val
     if (r.exitCode !== 0) return null;
     // Strip only the single trailing newline added by PowerShell's Write-Output,
     // preserving intentional leading/trailing whitespace in the secret value.
-    return r.stdout.replace(/\r?\n$/, "") || null;
+    return r.stdout.replace(/\r?\n$/, "");
   }
 
   async delete(key: string): Promise<void> {
