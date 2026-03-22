@@ -29,7 +29,6 @@ export interface PurgeResult {
   purged: number;
   namespace: string;
   keys: string[];
-  failed?: string[];
 }
 
 export interface RotateResult {

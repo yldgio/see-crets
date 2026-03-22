@@ -15,9 +15,12 @@ describe("getProjectName", () => {
     expect(name.length).toBeGreaterThan(0);
   });
 
-  it("returns the actual git root basename (see-crets)", () => {
-    // Tests run from the see-crets repo — the basename should match the folder name.
-    expect(getProjectName()).toBe("see-crets");
+  it("returns the actual git root basename", () => {
+    // Compute the expected name from git itself so this test is portable
+    // across renamed checkouts, forks, and CI paths.
+    const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"]);
+    const expected = require("path").basename(result.stdout.toString().trim());
+    expect(getProjectName()).toBe(expected);
   });
 
   it("spawner override: returns basename from injected path", () => {

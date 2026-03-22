@@ -54,21 +54,35 @@ Options:
 const args = process.argv.slice(2);
 const cmd = args[0];
 
-// Parse --project flag
+// Parse --project flag — reject duplicate occurrences to avoid positional arg corruption.
+const projectIndices = args.reduce<number[]>(
+  (acc, a, i) => (a === "--project" ? [...acc, i] : acc),
+  []
+);
+if (projectIndices.length > 1) {
+  console.error("Error: --project may only be specified once.");
+  process.exit(1);
+}
 let projectFlag: string | undefined;
-const projectIdx = args.indexOf("--project");
+const projectIdx = projectIndices[0] ?? -1;
 if (projectIdx !== -1 && args[projectIdx + 1]) {
   projectFlag = args[projectIdx + 1];
 }
 
 /**
- * Returns positional arguments with --flag value pairs removed.
+ * Returns positional arguments with supported flag value pairs removed.
+ * Currently strips only: --project <name>
  * e.g. ['set', '--project', 'foo', 'my-key'] → ['set', 'my-key']
  */
 function positionalArgs(): string[] {
-  return args.filter(
-    (a, i) => !a.startsWith("--") && (i === 0 || !args[i - 1].startsWith("--"))
-  );
+  const skip = new Set<number>();
+  if (projectIdx !== -1) {
+    skip.add(projectIdx);
+    if (projectIdx + 1 < args.length) {
+      skip.add(projectIdx + 1);
+    }
+  }
+  return args.filter((_, i) => !skip.has(i));
 }
 
 async function main() {
