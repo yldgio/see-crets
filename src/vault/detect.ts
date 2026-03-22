@@ -3,10 +3,12 @@ import type { DetectResult } from "./types.ts";
 
 /**
  * Detects the current OS and returns the appropriate vault backend.
+ * The optional `platform` parameter exists for testability; it defaults to
+ * `process.platform`.
  */
-export async function detectBackend(): Promise<VaultBackend> {
-  const platform = process.platform;
-
+export async function detectBackend(
+  platform: string = process.platform
+): Promise<VaultBackend> {
   if (platform === "win32") {
     const { WindowsVaultBackend } = await import("./windows.ts");
     const backend = new WindowsVaultBackend();
@@ -45,21 +47,7 @@ export async function detectBackend(): Promise<VaultBackend> {
   );
 }
 
-/** Returns a DetectResult without throwing — used by the `detect` command */
-export async function detectResult(): Promise<DetectResult> {
-  try {
-    const backend = await detectBackend();
-    return { available: true, backend: backend.name };
-  } catch (err) {
-    return {
-      available: false,
-      backend: "none",
-      detail: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/** Returns a DetectResult without throwing — used by the `detect` command */
+/** Returns a DetectResult without throwing -- used by the `detect` command */
 export async function detectResult(): Promise<DetectResult> {
   try {
     const backend = await detectBackend();

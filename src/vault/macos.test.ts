@@ -134,6 +134,11 @@ describe("MacosVaultBackend key validation", () => {
     await expect(backend.set("project/../escape", "val")).rejects.toThrow("traversal");
   });
 
+  it("set() rejects values containing newlines (security -i command injection)", async () => {
+    await expect(backend.set("key", "value\nwith\nnewlines")).rejects.toThrow("newline");
+    await expect(backend.set("key", "value\rwith\rcr")).rejects.toThrow("newline");
+  });
+
   it("set() accepts keys with slashes and dashes", async () => {
     const validatingBackend: VaultBackend = {
       name: backend.name,

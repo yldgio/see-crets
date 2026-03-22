@@ -24,7 +24,7 @@ jobs:
 
       - name: Install Linux vault tools
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install -y libsecret-tools pass
+        run: sudo apt-get update && sudo apt-get install -y libsecret-tools pass
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

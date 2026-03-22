@@ -134,6 +134,22 @@ describe("LinuxVaultBackend key validation", () => {
     await expect(backend.set("project/../escape", "val")).rejects.toThrow("traversal");
   });
 
+  it("get() rejects keys with path traversal segments", async () => {
+    await expect(backend.get("../escape")).rejects.toThrow("traversal");
+  });
+
+  it("get() rejects keys containing newlines", async () => {
+    await expect(backend.get("bad\nkey")).rejects.toThrow("newline");
+  });
+
+  it("delete() rejects keys with path traversal segments", async () => {
+    await expect(backend.delete("../escape")).rejects.toThrow("traversal");
+  });
+
+  it("delete() rejects keys containing newlines", async () => {
+    await expect(backend.delete("bad\nkey")).rejects.toThrow("newline");
+  });
+
   it("set() accepts keys with slashes and dashes", async () => {
     const validatingBackend: VaultBackend = {
       name: backend.name,
