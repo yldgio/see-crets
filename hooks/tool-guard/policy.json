@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "runtimes": ["github-copilot-cli", "opencode", "claude-code"],
+  "categories": {
+    "package-manager": {
+      "preferred": ["bun"],
+      "blocked": ["npm ", "yarn ", "pnpm "],
+      "mode": "warn",
+      "reason": "This project uses Bun. Use 'bun install', 'bun add', or 'bun remove' instead of npm/yarn/pnpm."
+    },
+    "task-runner": {
+      "preferred": ["bun run", "bunx"],
+      "blocked": ["npx "],
+      "mode": "warn",
+      "reason": "This project uses Bun. Use 'bunx' or 'bun run' instead of npx."
+    },
+    "test-runner": {
+      "preferred": ["bun test"],
+      "blocked": ["jest ", "vitest ", "mocha ", "jasmine "],
+      "mode": "deny",
+      "reason": "This project uses Bun's built-in test runner. Use 'bun test' instead of jest/vitest/mocha."
+    }
+  },
+  "extra_banned_commands": [
+    {
+      "pattern": "rm -rf",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Recursive force-remove can cause irreversible data loss. Use specific paths and 'rm -r' with care."
+    },
+    {
+      "pattern": "git push --force",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Force-pushing destroys shared history. Use '--force-with-lease' for safer forced updates."
+    },
+    {
+      "pattern": "git push -f",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Force-pushing destroys shared history. Use '--force-with-lease' for safer forced updates."
+    }
+  ]
+}
