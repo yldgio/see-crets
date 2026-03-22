@@ -48,9 +48,9 @@ export async function detectBackend(
 }
 
 /** Returns a DetectResult without throwing -- used by the `detect` command */
-export async function detectResult(): Promise<DetectResult> {
+export async function detectResult(platform?: string): Promise<DetectResult> {
   try {
-    const backend = await detectBackend();
+    const backend = await detectBackend(platform);
     return { available: true, backend: backend.name };
   } catch (err) {
     return {
