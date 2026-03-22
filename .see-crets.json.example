@@ -1,0 +1,15 @@
+{
+  "_comment": "see-crets env-var mapping config. Safe to commit — contains mappings only, never secret values.",
+  "_docs": "https://github.com/yldgio/see-crets#env-var-mapping",
+
+  "map": {
+    "_comment_map": "Keys are vault key-name suffixes (the part after the last /). Values are the env var name to inject.",
+
+    "my-github-token": "GITHUB_TOKEN",
+    "my-openai-key": "OPENAI_API_KEY",
+    "my-db-url": "DATABASE_URL",
+
+    "_comment_override": "You can also override a built-in mapping. Example: use GH_TOKEN instead of GITHUB_TOKEN:",
+    "github-token": "GH_TOKEN"
+  }
+}

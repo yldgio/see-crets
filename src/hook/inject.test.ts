@@ -182,4 +182,91 @@ describe("injectSecrets", () => {
     expect(result.command).toMatch(/\$\{_SC_\d+\}/);
     expect(result.command).not.toMatch(/\$_SC_\d+[^}]/);
   });
+
+  it("auto-inject: injects GITHUB_TOKEN for a vault key with github-token suffix", async () => {
+    const store = new Map([["my-app/github-token", "ghp_autoinject1234"]]);
+    const backend = createMockBackend(store);
+
+    const { injectSecrets } = await import("./inject.ts");
+    // No placeholder in the command — auto-inject must add GITHUB_TOKEN
+    const result = await injectSecrets("gh pr list", backend);
+
+    expect(result.env["GITHUB_TOKEN"]).toBe("ghp_autoinject1234");
+    expect(result.keys).toContain("my-app/github-token");
+    // Command is unchanged — no placeholder was present
+    expect(result.command).toBe("gh pr list");
+  });
+
+  it("auto-inject: project-namespaced key wins over global/ key for the same suffix", async () => {
+    // Both keys map to GITHUB_TOKEN — project namespace must win regardless of list order
+    const store = new Map([
+      ["global/github-token", "ghp_global_value_xxx"],
+      ["my-app/github-token", "ghp_project_value_yyy"],
+    ]);
+    const backend = createMockBackend(store);
+
+    const { injectSecrets } = await import("./inject.ts");
+    const result = await injectSecrets("gh pr list", backend);
+
+    expect(result.env["GITHUB_TOKEN"]).toBe("ghp_project_value_yyy");
+    // Only one env entry for GITHUB_TOKEN — no duplicate
+    const githubEntries = Object.entries(result.env).filter(([k]) => k === "GITHUB_TOKEN");
+    expect(githubEntries).toHaveLength(1);
+  });
+
+  it("auto-inject: list order does not affect which secret is injected (deterministic)", async () => {
+    // Simulate two different backends with reversed list order for same keys
+    const makeBackend = (order: string[]) => ({
+      name: "MockVault",
+      async isAvailable() { return true; },
+      async set() {},
+      async get(key: string) {
+        const store = new Map([
+          ["global/github-token", "ghp_global_val_111"],
+          ["proj/github-token", "ghp_proj_val_222"],
+        ]);
+        return store.get(key) ?? null;
+      },
+      async delete() {},
+      async list(_prefix: string) { return order; },
+    });
+
+    const { injectSecrets } = await import("./inject.ts");
+
+    const r1 = await injectSecrets("cmd", makeBackend(["global/github-token", "proj/github-token"]));
+    const r2 = await injectSecrets("cmd", makeBackend(["proj/github-token", "global/github-token"]));
+
+    // Both must inject the project key regardless of list order
+    expect(r1.env["GITHUB_TOKEN"]).toBe("ghp_proj_val_222");
+    expect(r2.env["GITHUB_TOKEN"]).toBe("ghp_proj_val_222");
+  });
+
+  it("auto-inject: disabled when autoInject: false", async () => {
+    const store = new Map([["my-app/github-token", "ghp_shouldnotappear"]]);
+    const backend = createMockBackend(store);
+
+    const { injectSecrets } = await import("./inject.ts");
+    const result = await injectSecrets("gh pr list", backend, { autoInject: false });
+
+    expect(result.env).toEqual({});
+    expect(result.keys).toHaveLength(0);
+  });
+
+  it("auto-inject: placeholder-injected key is not double-injected as a mapped env var", async () => {
+    const store = new Map([["my-app/github-token", "ghp_nodedup999999"]]);
+    const backend = createMockBackend(store);
+
+    const { injectSecrets } = await import("./inject.ts");
+    // Use the key as a placeholder — it should NOT also appear as GITHUB_TOKEN
+    const result = await injectSecrets(
+      "gh pr list --token {{SECRET:my-app/github-token}}",
+      backend,
+    );
+
+    // Only the _SC_ var, not GITHUB_TOKEN — no double-inject
+    const envKeys = Object.keys(result.env);
+    expect(envKeys.some((k) => k.startsWith("_SC_"))).toBe(true);
+    expect(result.env["GITHUB_TOKEN"]).toBeUndefined();
+    expect(result.keys).toHaveLength(1); // deduplicated
+  });
 });
