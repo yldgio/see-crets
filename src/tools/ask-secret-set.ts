@@ -30,8 +30,8 @@ export async function askSecretSet(
   rawKey: string,
   project?: string
 ): Promise<SetResult | NonInteractiveResult> {
-  const inRepo = isInGitRepo();
-  const ns = project ?? (inRepo ? getProjectName() : "global");
+  // Only shell out to git when no project override is provided.
+  const ns = project ?? (isInGitRepo() ? getProjectName() : "global");
   const qualifiedKey = rawKey.includes("/") ? rawKey : `${ns}/${rawKey}`;
 
   if (!process.stdin.isTTY) {

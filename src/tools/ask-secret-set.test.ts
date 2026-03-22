@@ -151,6 +151,11 @@ describe("askSecretSet — real function call", () => {
       detectResult: async () => ({ available: false, backend: "none", detail: "vault unavailable in CI" }),
     }));
 
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "global",
+    }));
+
     try {
       const { askSecretSet } = await import("./ask-secret-set.ts");
       const result = await askSecretSet("github-token", "ci-project");
@@ -183,6 +188,11 @@ describe("askSecretSet — real function call", () => {
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => vault,
       detectResult: async () => ({ available: true, backend: "MockVault" }),
+    }));
+
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "global",
     }));
 
     try {
