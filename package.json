@@ -1,0 +1,17 @@
+{
+  "name": "see-crets",
+  "version": "0.1.0",
+  "description": "OS-native secret vault for AI agents — LLMs see key names only, never values",
+  "module": "src/cli.ts",
+  "scripts": {
+    "build": "bun build ./src/cli.ts --compile --outfile ./dist/see-crets",
+    "dev": "bun run src/cli.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
