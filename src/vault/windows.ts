@@ -129,7 +129,7 @@ export class WindowsVaultBackend implements VaultBackend {
   readonly name = "Windows Credential Manager";
 
   async isAvailable(): Promise<boolean> {
-    const r = psRun("cmdkey /? 2>&1 | Out-Null");
+    const r = psRun("cmdkey /? 2>&1 | Out-Null; exit $LASTEXITCODE");
     return r.exitCode === 0;
   }
 
@@ -166,7 +166,7 @@ Write-Output $val
     if (r.exitCode !== 0) return null;
     // Strip only the single trailing newline added by PowerShell's Write-Output,
     // preserving intentional leading/trailing whitespace in the secret value.
-    return r.stdout.replace(/\r?\n$/, "") || null;
+    return r.stdout.replace(/\r?\n$/, "");
   }
 
   async delete(key: string): Promise<void> {
