@@ -99,8 +99,11 @@ export async function askSecretSet(
 /**
  * Reads a password from stdin with echoing disabled.
  * The typed characters are hidden from the terminal.
+ *
+ * Exported so that human-only commands (rotate) can reuse the same masked
+ * input without duplicating the implementation.
  */
-async function readMaskedInput(prompt: string): Promise<string> {
+export async function readMaskedInput(prompt: string): Promise<string> {
   process.stderr.write(prompt);
 
   return new Promise<string>((resolve, reject) => {
