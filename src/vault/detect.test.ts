@@ -5,11 +5,12 @@ import { detectResult } from "./detect.ts";
 // detect.ts. In Bun, module mocks persist across files within the same test run,
 // so the `detectResult` and `detectBackend` exports here may be mocked versions.
 //
-// Reliable platform-routing tests (freebsd → throws, win32 → Windows backend, …)
-// are covered by the CI matrix which runs `bun test` on isolated win/ubuntu/macos
-// runners where no other test file has mocked detect.ts.
+// Reliable platform-routing behavior (freebsd → throws, win32 → Windows backend, …)
+// should be validated in dedicated tests that import ./detect.ts in a fresh Bun
+// process or otherwise avoid cross-file module mocks.
 //
-// The tests here stay meaningful under both the real and mocked module.
+// The tests here intentionally avoid platform assumptions and stay meaningful
+// under both the real and mocked module.
 
 describe("detectResult", () => {
   it("returns a valid DetectResult shape", async () => {
