@@ -1,6 +1,17 @@
 import { detectBackend } from "../vault/detect.ts";
 import { getProjectName, isInGitRepo } from "../utils/git.ts";
 
+/**
+ * Thrown when the user cancels masked input (Ctrl+C).
+ * Callers (e.g. the CLI entry point) should catch this and decide the exit code.
+ */
+export class CancellationError extends Error {
+  constructor() {
+    super("Input cancelled by user (Ctrl+C)");
+    this.name = "CancellationError";
+  }
+}
+
 export interface SetResult {
   stored: true;
   key: string;
@@ -137,9 +148,11 @@ async function readMaskedInput(prompt: string): Promise<string> {
           case "\u0003": // Ctrl+C
             stdin.pause();
             restoreRawMode();
+            stdin.removeListener("data", handler);
+            stdin.removeListener("error", restoreAndReject);
             process.stderr.write("\n^C\n");
-            process.exit(1);
-            break;
+            reject(new CancellationError());
+            return;
 
           case "\u007f": // DEL (backspace on most terminals)
           case "\u0008": // BS

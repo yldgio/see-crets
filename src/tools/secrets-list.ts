@@ -13,12 +13,20 @@ export interface ListResult {
  */
 export async function secretsList(projectOverride?: string): Promise<ListResult> {
   const backend = await detectBackend();
-  const inRepo = isInGitRepo();
-  const project = projectOverride ?? (inRepo ? getProjectName() : "global");
 
-  const note = !inRepo
-    ? "No git root found — operating in global namespace"
-    : undefined;
+  let project: string;
+  let note: string | undefined;
+
+  if (projectOverride !== undefined) {
+    // Override provided — skip git detection entirely; no misleading note
+    project = projectOverride;
+  } else {
+    const inRepo = isInGitRepo();
+    project = inRepo ? getProjectName() : "global";
+    if (!inRepo) {
+      note = "No git root found — operating in global namespace";
+    }
+  }
 
   // Collect keys from both project namespace and global namespace (deduplicated)
   const prefixes =
@@ -29,7 +37,7 @@ export async function secretsList(projectOverride?: string): Promise<ListResult>
 
   return {
     keys,
-    namespace: inRepo ? project : "global",
+    namespace: project,
     ...(note ? { note } : {}),
   };
 }

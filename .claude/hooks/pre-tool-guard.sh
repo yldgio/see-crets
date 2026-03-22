@@ -5,9 +5,9 @@ INPUT="$(cat)"
 TOOL_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')"
 
 # tool_input is already a parsed object (not a JSON string — no second parse needed)
-[ "$TOOL_NAME" = "Bash" ] || exit 0
+[ "$TOOL_NAME" = "Bash" ] || [ "$TOOL_NAME" = "PowerShell" ] || exit 0
 
-COMMAND="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')"
+COMMAND="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // .tool_input.input // empty')"
 [ -z "$COMMAND" ] && exit 0
 # Normalize whitespace to prevent bypass via tabs or multiple spaces
 NORM="$(printf '%s' "$COMMAND" | tr '[:upper:]' '[:lower:]' | tr -s '[:space:]' ' ' | sed 's/^ //;s/ $//')"

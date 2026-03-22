@@ -2,115 +2,9 @@ import { describe, it, expect, mock } from "bun:test";
 import type { VaultBackend } from "../vault/types.ts";
 
 // ---------------------------------------------------------------------------
-// Mock vault backend (in-memory, no OS calls)
+// Shared mock factory — in-memory backend, no OS calls
 // ---------------------------------------------------------------------------
 
-function createMockBackend(): VaultBackend & { _store: Map<string, string> } {
-  const store = new Map<string, string>();
-
-  return {
-    name: "MockBackend",
-    _store: store,
-
-    async isAvailable() {
-      return true;
-    },
-
-    async set(key: string, value: string) {
-      store.set(key, value);
-    },
-
-    async get(key: string) {
-      return store.get(key) ?? null;
-    },
-
-    async delete(key: string) {
-      store.delete(key);
-    },
-
-    async list(prefix: string) {
-      return [...store.keys()].filter((k) => k.startsWith(prefix));
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Tests for secretsList using mock backend
-// ---------------------------------------------------------------------------
-
-describe("secretsList", () => {
-  it("returns key names for project and global namespaces", async () => {
-    // We exercise the list logic directly — no OS vault
-    const backend = createMockBackend();
-    await backend.set("my-project/github-token", "secret1");
-    await backend.set("my-project/npm-token", "secret2");
-    await backend.set("global/shared-key", "secret3");
-    await backend.set("other-project/unrelated", "secret4");
-
-    const projectKeys = await backend.list("my-project/");
-    const globalKeys = await backend.list("global/");
-
-    // Combined result mirrors what secretsList does
-    const keys = [...new Set([...projectKeys, ...globalKeys])];
-
-    expect(keys).toContain("my-project/github-token");
-    expect(keys).toContain("my-project/npm-token");
-    expect(keys).toContain("global/shared-key");
-    expect(keys).not.toContain("other-project/unrelated");
-  });
-
-  it("returns only global keys when project is 'global'", async () => {
-    const backend = createMockBackend();
-    await backend.set("global/token-a", "val1");
-    await backend.set("global/token-b", "val2");
-    await backend.set("my-project/token-c", "val3");
-
-    const keys = await backend.list("global/");
-
-    expect(keys).toContain("global/token-a");
-    expect(keys).toContain("global/token-b");
-    expect(keys).not.toContain("my-project/token-c");
-  });
-
-  it("returns no values — only key names", async () => {
-    const backend = createMockBackend();
-    await backend.set("my-project/secret-key", "SUPER_SECRET_VALUE");
-
-    const keys = await backend.list("my-project/");
-
-    // Ensure the list result contains the key name, not the value
-    expect(keys).toContain("my-project/secret-key");
-    for (const key of keys) {
-      expect(key).not.toContain("SUPER_SECRET_VALUE");
-    }
-  });
-
-  it("returns empty array when nothing is stored", async () => {
-    const backend = createMockBackend();
-    const keys = await backend.list("my-project/");
-    expect(keys).toHaveLength(0);
-  });
-
-  it("deduplicates keys returned from multiple prefixes", async () => {
-    const backend = createMockBackend();
-    // Only one key in global
-    await backend.set("global/shared", "val");
-
-    const projectKeys = await backend.list("my-project/");
-    const globalKeys = await backend.list("global/");
-    const combined = [...new Set([...projectKeys, ...globalKeys])];
-
-    // Should appear exactly once
-    expect(combined.filter((k) => k === "global/shared")).toHaveLength(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Real secretsList() call tests
-// These exercise the actual function with mocked dependencies.
-// ---------------------------------------------------------------------------
-
-/** Creates a mock VaultBackend backed by a Map for use with mock.module. */
 function createMockVaultFromStore(store: Map<string, string>): VaultBackend {
   return {
     name: "MockVault",
@@ -123,6 +17,107 @@ function createMockVaultFromStore(store: Map<string, string>): VaultBackend {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// secretsList() — real function call tests via mocked dependencies
+// ---------------------------------------------------------------------------
+
+describe("secretsList", () => {
+  it("returns project and global keys, excludes other namespaces", async () => {
+    const mockStore = new Map<string, string>([
+      ["my-project/github-token", "secret1"],
+      ["my-project/npm-token", "secret2"],
+      ["global/shared-key", "secret3"],
+      ["other-project/unrelated", "secret4"],
+    ]);
+
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: async () => createMockVaultFromStore(mockStore),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => true,
+      getProjectName: () => "my-project",
+    }));
+
+    const { secretsList } = await import("./secrets-list.ts");
+    const result = await secretsList();
+
+    expect(result.keys).toContain("my-project/github-token");
+    expect(result.keys).toContain("my-project/npm-token");
+    expect(result.keys).toContain("global/shared-key");
+    expect(result.keys).not.toContain("other-project/unrelated");
+    expect(result.namespace).toBe("my-project");
+  });
+
+  it("returns only global keys when not in a git repo", async () => {
+    const mockStore = new Map<string, string>([
+      ["global/token-a", "val1"],
+      ["global/token-b", "val2"],
+      ["my-project/token-c", "val3"],
+    ]);
+
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: async () => createMockVaultFromStore(mockStore),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "my-project",
+    }));
+
+    const { secretsList } = await import("./secrets-list.ts");
+    const result = await secretsList();
+
+    expect(result.keys).toContain("global/token-a");
+    expect(result.keys).toContain("global/token-b");
+    expect(result.keys).not.toContain("my-project/token-c");
+    expect(result.namespace).toBe("global");
+    expect(result.note).toContain("global namespace");
+  });
+
+  it("returns no values — only key names", async () => {
+    const mockStore = new Map<string, string>([
+      ["vals-project/secret-key", "SUPER_SECRET_VALUE"],
+    ]);
+
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: async () => createMockVaultFromStore(mockStore),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => true,
+      getProjectName: () => "vals-project",
+    }));
+
+    const { secretsList } = await import("./secrets-list.ts");
+    const result = await secretsList();
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("SUPER_SECRET_VALUE");
+    expect(result.keys).toContain("vals-project/secret-key");
+  });
+
+  it("deduplicates keys returned from multiple prefixes", async () => {
+    const mockStore = new Map<string, string>([
+      ["global/shared", "val"],
+    ]);
+
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: async () => createMockVaultFromStore(mockStore),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => true,
+      getProjectName: () => "dedup-project",
+    }));
+
+    const { secretsList } = await import("./secrets-list.ts");
+    const result = await secretsList();
+
+    expect(result.keys.filter((k) => k === "global/shared")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Additional secretsList() integration tests
+// ---------------------------------------------------------------------------
 
 describe("secretsList — real function call", () => {
   it("returns project and global keys, never values", async () => {

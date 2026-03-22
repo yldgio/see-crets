@@ -6,10 +6,15 @@ $rawInput = [Console]::In.ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($rawInput)) { exit 0 }
 
 $payload = $rawInput | ConvertFrom-Json
-if ($payload.tool_name -ne 'Bash') { exit 0 }
+# Handle both Bash and PowerShell tool events; ignore all others
+if ($payload.tool_name -notin @('Bash', 'PowerShell')) { exit 0 }
 
 # tool_input is already a parsed object — no second parse needed
+# Bash events use .command; PowerShell events may use .command or .input
 $command = $payload.tool_input?.command
+if ([string]::IsNullOrWhiteSpace($command)) {
+    $command = $payload.tool_input?.input
+}
 if ([string]::IsNullOrWhiteSpace($command)) { exit 0 }
 # Normalize whitespace (collapse tabs/multiple spaces) to prevent bypass via `rm\t-rf`
 $norm = ($command -replace '\s+', ' ').Trim().ToLowerInvariant()

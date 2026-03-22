@@ -192,6 +192,12 @@ Write-Output "ok"
   }
 
   async list(prefix: string): Promise<string[]> {
+    // Windows CredEnumerate treats * and ? as wildcards — reject them to
+    // prevent a crafted prefix from over-listing credentials.
+    if (/[*?]/.test(prefix)) {
+      throw new Error(`list() prefix must not contain wildcard characters: "${prefix}"`);
+    }
+
     const filterPrefix = psEscape(`${TARGET_PREFIX}${prefix}`);
     const script = `
 Add-Type -TypeDefinition @"
@@ -203,10 +209,10 @@ $targets | ForEach-Object { Write-Output $_ }
     const r = psRun(script);
     if (r.exitCode !== 0) return [];
 
-    const prefixStrip = TARGET_PREFIX;
+    const fullPrefix = TARGET_PREFIX + prefix;
     return r.stdout
       .split(/\r?\n/)
-      .filter((l) => l.startsWith(prefixStrip))
-      .map((l) => l.slice(prefixStrip.length));
+      .filter((l) => l.startsWith(fullPrefix))
+      .map((l) => l.slice(TARGET_PREFIX.length));
   }
 }

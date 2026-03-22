@@ -16,7 +16,7 @@
  *   1 — usage error / operation failed
  */
 
-import { askSecretSet } from "./tools/ask-secret-set.ts";
+import { askSecretSet, CancellationError } from "./tools/ask-secret-set.ts";
 import { secretsList } from "./tools/secrets-list.ts";
 import { secretsDetect } from "./tools/secrets-detect.ts";
 import { detectBackend } from "./vault/detect.ts";
@@ -91,6 +91,10 @@ async function main() {
 }
 
 main().catch((err) => {
+  if (err instanceof CancellationError) {
+    // User pressed Ctrl+C — exit silently with code 1
+    process.exit(1);
+  }
   const msg = err instanceof Error ? err.message : String(err);
   console.error(JSON.stringify({ error: msg }));
   process.exit(1);

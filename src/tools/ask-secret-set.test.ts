@@ -2,130 +2,9 @@ import { describe, it, expect, mock } from "bun:test";
 import type { VaultBackend } from "../vault/types.ts";
 
 // ---------------------------------------------------------------------------
-// Mock vault backend
+// Shared mock factory
 // ---------------------------------------------------------------------------
 
-function createMockBackend(
-  initial?: Record<string, string>
-): VaultBackend & { _store: Map<string, string> } {
-  const store = new Map<string, string>(
-    initial ? Object.entries(initial) : []
-  );
-
-  return {
-    name: "MockBackend",
-    _store: store,
-    async isAvailable() { return true; },
-    async set(key, value) { store.set(key, value); },
-    async get(key) { return store.get(key) ?? null; },
-    async delete(key) { store.delete(key); },
-    async list(prefix) {
-      return [...store.keys()].filter((k) => k.startsWith(prefix));
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Core security invariant tests
-// askSecretSet must NEVER include the value in its return object.
-// ---------------------------------------------------------------------------
-
-describe("askSecretSet — security invariant", () => {
-  it("response does NOT contain the secret value (stored=true path)", () => {
-    // Simulate what askSecretSet returns on successful storage
-    const secretValue = "ghp_super_secret_token_abc123";
-    const qualifiedKey = "my-project/github-token";
-
-    // The result shape the tool must return
-    const result = {
-      stored: true as const,
-      key: qualifiedKey,
-      namespace: "my-project",
-    };
-
-    // Verify: value absent from every field
-    const serialized = JSON.stringify(result);
-    expect(serialized).not.toContain(secretValue);
-    expect(result).not.toHaveProperty("value");
-    expect(result.stored).toBe(true);
-    expect(result.key).toBe(qualifiedKey);
-  });
-
-  it("response does NOT contain the secret value (stored=false non-interactive path)", () => {
-    const secretValue = "ghp_super_secret_token_abc123";
-    const qualifiedKey = "my-project/github-token";
-
-    const result = {
-      stored: false as const,
-      key: qualifiedKey,
-      instructions:
-        "Open a separate terminal and run:\n\n  see-crets set my-project/github-token",
-    };
-
-    const serialized = JSON.stringify(result);
-    expect(serialized).not.toContain(secretValue);
-    expect(result).not.toHaveProperty("value");
-    expect(result.stored).toBe(false);
-  });
-
-  it("set result key matches the qualified key, not a raw key fragment", () => {
-    const result = {
-      stored: true as const,
-      key: "my-project/github-token",
-      namespace: "my-project",
-    };
-
-    // Key must be fully qualified (namespace/name)
-    expect(result.key).toMatch(/^[^/]+\/.+$/);
-  });
-
-  it("mock backend stores without returning value", async () => {
-    const backend = createMockBackend();
-    const secretValue = "s3cr3t_database_url_12345";
-    const key = "my-project/db-url";
-
-    await backend.set(key, secretValue);
-
-    // list() must not reveal the value
-    const keys = await backend.list("my-project/");
-    expect(keys).toContain(key);
-    const serializedKeys = JSON.stringify(keys);
-    expect(serializedKeys).not.toContain(secretValue);
-  });
-
-  it("fully qualified key preserves provided namespace when key already has slash", () => {
-    // Simulate logic: if rawKey already contains "/", use as-is
-    const rawKey = "global/my-special-token";
-    const qualifiedKey = rawKey.includes("/") ? rawKey : `my-project/${rawKey}`;
-    expect(qualifiedKey).toBe("global/my-special-token");
-  });
-
-  it("key without slash is namespaced with project", () => {
-    const rawKey = "github-token";
-    const project = "my-project";
-    const qualifiedKey = rawKey.includes("/") ? rawKey : `${project}/${rawKey}`;
-    expect(qualifiedKey).toBe("my-project/github-token");
-  });
-
-  it("non-interactive result instructions mention see-crets set", () => {
-    const key = "my-project/github-token";
-    const result = {
-      stored: false as const,
-      key,
-      instructions: `Open a separate terminal and run:\n\n  see-crets set ${key}`,
-    };
-
-    expect(result.instructions).toContain("see-crets set");
-    expect(result.instructions).toContain(key);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Real askSecretSet() call tests
-// These exercise the actual function with mocked dependencies.
-// ---------------------------------------------------------------------------
-
-/** Creates a minimal in-memory VaultBackend for mocking detectBackend. */
 function createMockVault(keys: string[] = []): VaultBackend {
   return {
     name: "MockVault",
@@ -139,7 +18,105 @@ function createMockVault(keys: string[] = []): VaultBackend {
   };
 }
 
-describe("askSecretSet — real function call", () => {
+// ---------------------------------------------------------------------------
+// Core security invariant tests — call real askSecretSet() with mocked deps
+// ---------------------------------------------------------------------------
+
+describe("askSecretSet — security invariant", () => {
+  it("non-interactive stored=false: result never contains the secret value", async () => {
+    const secretValue = "ghp_super_secret_token_abc123";
+    const originalIsTTY = process.stdin.isTTY;
+    (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = false;
+
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: () => Promise.reject(new Error("vault unavailable")),
+      detectResult: async () => ({ available: false, backend: "none", detail: "vault unavailable" }),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "global",
+    }));
+
+    try {
+      const { askSecretSet } = await import("./ask-secret-set.ts");
+      const result = await askSecretSet("github-token", "my-project");
+
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain(secretValue);
+      expect(result).not.toHaveProperty("value");
+      expect(result.stored).toBe(false);
+      expect(result.key).toBe("my-project/github-token");
+    } finally {
+      (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
+    }
+  });
+
+  it("non-interactive stored=true (key exists): result never contains value", async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = false;
+
+    const vault = createMockVault(["inv-project/existing-key"]);
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: async () => vault,
+      detectResult: async () => ({ available: true, backend: "MockVault" }),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "global",
+    }));
+
+    try {
+      const { askSecretSet } = await import("./ask-secret-set.ts");
+      const result = await askSecretSet("existing-key", "inv-project");
+
+      expect(result).not.toHaveProperty("value");
+      expect(result.stored).toBe(true);
+      expect(result.key).toBe("inv-project/existing-key");
+    } finally {
+      (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
+    }
+  });
+
+  it("set result key matches the qualified key, not a raw key fragment", () => {
+    // Pure logic test — key qualification rule: namespace/name
+    const qualify = (raw: string, ns: string) =>
+      raw.includes("/") ? raw : `${ns}/${raw}`;
+
+    expect(qualify("github-token", "my-project")).toBe("my-project/github-token");
+    expect(qualify("global/my-special-token", "my-project")).toBe("global/my-special-token");
+    expect(qualify("github-token", "my-project")).toMatch(/^[^/]+\/.+$/);
+  });
+
+  it("non-interactive instructions mention 'see-crets set' and the qualified key", async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = false;
+
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: () => Promise.reject(new Error("vault unavailable")),
+      detectResult: async () => ({ available: false, backend: "none", detail: "vault unavailable" }),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "global",
+    }));
+
+    try {
+      const { askSecretSet } = await import("./ask-secret-set.ts");
+      const result = await askSecretSet("my-token", "my-project");
+
+      if (!result.stored) {
+        expect(result.instructions).toContain("see-crets set");
+        expect(result.instructions).toContain("my-project/my-token");
+      }
+    } finally {
+      (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
+    }
+  });
+});
+
+
+
+describe("askSecretSet — additional integration tests", () => {
   it("non-interactive mode: stored=false and result never contains secret value", async () => {
     const secretValue = "ghp_super_secret_token_abc123";
     const originalIsTTY = process.stdin.isTTY;
