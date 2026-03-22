@@ -48,3 +48,4 @@ build/
 .cache/
 .yarn/cache
 .pnp.*
+package-lock.json
