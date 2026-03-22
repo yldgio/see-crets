@@ -33,6 +33,7 @@ describe("secretsList", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
     mock.module("../utils/git.ts", () => ({
       isInGitRepo: () => true,
@@ -58,6 +59,7 @@ describe("secretsList", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
     mock.module("../utils/git.ts", () => ({
       isInGitRepo: () => false,
@@ -81,6 +83,7 @@ describe("secretsList", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
     mock.module("../utils/git.ts", () => ({
       isInGitRepo: () => true,
@@ -102,6 +105,7 @@ describe("secretsList", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
     mock.module("../utils/git.ts", () => ({
       isInGitRepo: () => true,
@@ -129,6 +133,7 @@ describe("secretsList — real function call", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
 
     mock.module("../utils/git.ts", () => ({
@@ -157,6 +162,7 @@ describe("secretsList — real function call", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
 
     mock.module("../utils/git.ts", () => ({
@@ -178,6 +184,7 @@ describe("secretsList — real function call", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => createMockVaultFromStore(mockStore),
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
 
     mock.module("../utils/git.ts", () => ({

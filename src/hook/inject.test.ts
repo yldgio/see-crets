@@ -30,6 +30,7 @@ describe("injectSecrets", () => {
 
     mock.module("../vault/detect.ts", () => ({
       detectBackend: async () => backend,
+      detectResult: async () => ({ available: true, backend: "MockBackend" }),
     }));
 
     const { injectSecrets } = await import("./inject.ts");
