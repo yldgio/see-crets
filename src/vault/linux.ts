@@ -265,7 +265,7 @@ export class LinuxVaultBackend implements VaultBackend {
       process.env.PASSWORD_STORE_DIR ?? `${homedir()}/.password-store`;
     const searchDir = `${storeDir}/see-crets/${prefix}`;
 
-    const r = shRun(["find", searchDir, "-name", "*.gpg", "-type", "f"]);
+    const r = shRun(["find", "--", searchDir, "-name", "*.gpg", "-type", "f"]);
     if (r.exitCode !== 0) return [];
 
     const basePath = `${storeDir}/see-crets/`;
