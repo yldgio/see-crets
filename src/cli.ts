@@ -151,6 +151,20 @@ async function main() {
       break;
     }
 
+    case "inject": {
+      const { runInjectCommand } = await import("./tools/inject-command.ts");
+      await runInjectCommand();
+      break;
+    }
+
+    case "scrub-output": {
+      const { runScrubOutputCommand } = await import(
+        "./tools/scrub-output-command.ts"
+      );
+      await runScrubOutputCommand();
+      break;
+    }
+
     default:
       usage();
   }

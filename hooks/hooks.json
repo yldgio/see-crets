@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "_note": "Documentation descriptor only. No runtime auto-discovers this file. Hooks are declared in plugin.json (Copilot CLI) and .claude/settings.json (Claude Code).",
+  "description": "see-crets pre-tool-use hooks: secret placeholder resolution, vault CLI blocking, and output scrubbing",
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./pre-secrets.sh",
+        "powershell": "./pre-secrets.ps1",
+        "timeoutSec": 30,
+        "description": "Resolve {{SECRET:key}} placeholders, block OS vault CLI calls, and scrub secret values from tool output"
+      }
+    ]
+  }
+}

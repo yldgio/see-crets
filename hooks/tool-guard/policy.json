@@ -39,6 +39,120 @@
       "match": "contains",
       "mode": "deny",
       "reason": "Force-pushing destroys shared history. Use '--force-with-lease' for safer forced updates."
+    },
+    {
+      "pattern": "security find-generic-password",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Keychain reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "security find-internet-password",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Keychain reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "security find-certificate",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Keychain reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "cmdkey /list",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Windows Credential Manager reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "cmdkey /add",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Windows Credential Manager writes are blocked. Use 'see-crets set <key>' to store credentials safely."
+    },
+    {
+      "pattern": "vaultcmd /list",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Windows Vault reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "secret-tool lookup",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct libsecret reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "secret-tool get",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct libsecret reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "pass show",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct pass/GPG store reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "pass ls",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Listing the pass key tree is blocked. Use 'see-crets list' to enumerate stored keys."
+    },
+    {
+      "pattern": "security dump-keychain",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Dumping the macOS Keychain is blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "security -i",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Interactive Keychain access is blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "secret-tool search",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct libsecret enumeration is blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "cmdkey /generic:",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct Windows Credential Manager reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "op read",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct 1Password CLI reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "op item get",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct 1Password CLI reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "kwallet-query",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "Direct KDE Wallet reads are blocked. Use 'see-crets list' to find stored keys and '{{SECRET:key}}' placeholders to reference them."
+    },
+    {
+      "pattern": "see-crets inject",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "'see-crets inject' is an internal hook IPC command and must not be called directly by AI tools. Use '{{SECRET:key}}' placeholders in your commands."
+    },
+    {
+      "pattern": "see-crets scrub-output",
+      "match": "contains",
+      "mode": "deny",
+      "reason": "'see-crets scrub-output' is an internal hook IPC command and must not be called directly by AI tools."
     }
   ]
 }
