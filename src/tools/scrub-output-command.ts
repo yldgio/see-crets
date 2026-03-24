@@ -48,7 +48,13 @@ export async function scrubOutput(
  * Always exits 0 — output must not be lost due to a scrub failure.
  */
 export async function runScrubOutputCommand(): Promise<void> {
-  const input = await Bun.stdin.text();
-  const scrubbed = await scrubOutput(input);
-  process.stdout.write(scrubbed);
+  let input = "";
+  try {
+    input = await Bun.stdin.text();
+    const scrubbed = await scrubOutput(input);
+    process.stdout.write(scrubbed);
+  } catch {
+    // Stdin read or scrub failure — write whatever we captured so output is never lost
+    process.stdout.write(input);
+  }
 }

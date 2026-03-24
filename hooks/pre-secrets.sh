@@ -87,7 +87,7 @@ printf '%s' "$COMMAND" | grep -qF '{{SECRET:' && HAS_PLACEHOLDERS="true"
 
 # Run injection; capture stderr separately so failures surface a clear deny reason.
 # Require mktemp: the predictable /tmp/PID fallback is a symlink-attack risk.
-INJECT_STDERR_FILE="$(mktemp 2>/dev/null)"
+INJECT_STDERR_FILE="$(mktemp 2>/dev/null)" || true
 if [ -z "$INJECT_STDERR_FILE" ]; then
   # mktemp unavailable — for Copilot CLI with no placeholders, fail open (allow passthrough).
   # For Claude Code or explicit placeholders, we must deny to avoid leaking partial resolution.

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.1
 # pre-secrets: PreToolUse hook shared between Copilot CLI and Claude Code.
 #
 # Responsibilities:
@@ -126,7 +126,7 @@ if ($injectResult.keys.Count -eq 0) {
     # the LLM sees them. Copilot CLI ignores updatedInput, so allow passthrough there.
     if ($isClaude) {
         $escapedCmd = $command -replace "'", "''"
-        $wrappedNoInject = "`$__r = (Invoke-Expression '$escapedCmd' 2>&1); `$__ec = `$LASTEXITCODE; `$__r | & '$seeCrets' scrub-output; exit `$__ec"
+        $wrappedNoInject = "`$__f = [System.IO.Path]::GetTempFileName(); Invoke-Expression '$escapedCmd' 2>&1 | Out-File `$__f -Encoding utf8; `$__ec = `$LASTEXITCODE; Get-Content `$__f -Raw | & '$seeCrets' scrub-output; Remove-Item `$__f -ErrorAction SilentlyContinue; exit `$__ec"
         @{
             hookSpecificOutput = @{
                 hookEventName      = 'PreToolUse'
@@ -153,7 +153,7 @@ $envBlock = $envLines -join '; '
 # Wrap: set env vars, use Invoke-Expression for reliable command execution from a string,
 # pipe through scrub, and preserve the original command's exit code.
 $escapedModCmd = $modifiedCmd -replace "'", "''"
-$wrappedCmd = "$envBlock; `$__r = (Invoke-Expression '$escapedModCmd' 2>&1); `$__ec = `$LASTEXITCODE; `$__r | & '$seeCrets' scrub-output; exit `$__ec"
+$wrappedCmd = "$envBlock; `$__f = [System.IO.Path]::GetTempFileName(); Invoke-Expression '$escapedModCmd' 2>&1 | Out-File `$__f -Encoding utf8; `$__ec = `$LASTEXITCODE; Get-Content `$__f -Raw | & '$seeCrets' scrub-output; Remove-Item `$__f -ErrorAction SilentlyContinue; exit `$__ec"
 
 # Return updatedInput (allow with resolved command) — only Claude Code supports updatedInput.
 # For Copilot CLI: only deny when the original command had explicit {{SECRET:...}} placeholders.

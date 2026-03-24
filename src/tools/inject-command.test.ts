@@ -162,7 +162,7 @@ describe("scrubOutput", () => {
   });
 
   it("does not scrub values shorter than MIN_SECRET_LENGTH (8 chars)", async () => {
-    const store = new Map([["proj/short", "abc"]]);
+    const store = new Map([["global/short", "abc"]]);
     const backend = createMockBackend(store);
 
     const raw = "output contains abc somewhere";
