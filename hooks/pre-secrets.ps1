@@ -87,11 +87,56 @@ if (Test-Path $policyPath) {
 $seeCrets = (Get-Command 'see-crets' -ErrorAction SilentlyContinue)?.Source
 if (-not $seeCrets) { exit 0 }
 
-$injectResultRaw = ($command | & $seeCrets inject 2>$null)
-if ([string]::IsNullOrWhiteSpace($injectResultRaw)) { exit 0 }
-try { $injectResult = $injectResultRaw | ConvertFrom-Json } catch { exit 0 }
+# Detect explicit placeholders before injection — drives Copilot CLI deny decision
+$hasPlaceholders = $command -match '\{\{SECRET:'
 
-if ($injectResult.keys.Count -eq 0) { exit 0 }
+# Run injection; capture stderr separately so failures surface a clear deny reason
+$injectErrFile = [System.IO.Path]::GetTempFileName()
+$injectResultRaw = $null
+$injectExitCode = 0
+try {
+    $injectResultRaw = ($command | & $seeCrets inject 2>$injectErrFile)
+    $injectExitCode = $LASTEXITCODE
+} catch {
+    $injectExitCode = 1
+}
+$injectErrMsg = if (Test-Path $injectErrFile) { (Get-Content $injectErrFile -Raw).Trim() } else { '' }
+Remove-Item $injectErrFile -ErrorAction SilentlyContinue
+
+if ($injectExitCode -ne 0) {
+    # For Copilot CLI with no explicit placeholders: fail open rather than blocking unrelated
+    # commands when the vault is temporarily unavailable (auto-inject failures are not fatal).
+    if (-not $isClaude -and -not $hasPlaceholders) { exit 0 }
+    $msg = if ([string]::IsNullOrWhiteSpace($injectErrMsg)) {
+        "Secret injection failed (exit $injectExitCode): see-crets inject reported an error and placeholders could not be resolved."
+    } else {
+        "Secret injection failed (exit $injectExitCode): $injectErrMsg"
+    }
+    Deny $msg
+}
+
+if ([string]::IsNullOrWhiteSpace($injectResultRaw)) { exit 0 }
+try { $injectResult = $injectResultRaw | ConvertFrom-Json } catch {
+    Deny 'Secret injection failed: unable to parse see-crets output as JSON.'
+}
+
+if ($injectResult.keys.Count -eq 0) {
+    # No injection needed. For Claude Code, still wrap with scrub-output so any vault
+    # secret values that appear in tool output (e.g. from cat/echo) are redacted before
+    # the LLM sees them. Copilot CLI ignores updatedInput, so allow passthrough there.
+    if ($isClaude) {
+        $escapedCmd = $command -replace "'", "''"
+        $wrappedNoInject = "`$__r = (Invoke-Expression '$escapedCmd' 2>&1); `$__ec = `$LASTEXITCODE; `$__r | & '$seeCrets' scrub-output; exit `$__ec"
+        @{
+            hookSpecificOutput = @{
+                hookEventName      = 'PreToolUse'
+                permissionDecision = 'allow'
+                updatedInput       = @{ command = $wrappedNoInject }
+            }
+        } | ConvertTo-Json -Depth 4 -Compress -EscapeHandling EscapeNonAscii
+    }
+    exit 0
+}
 
 $modifiedCmd = [string]$injectResult.command
 
@@ -105,11 +150,15 @@ foreach ($p in $injectResult.env.PSObject.Properties) {
 }
 $envBlock = $envLines -join '; '
 
-# Wrap: capture output, restore original exit code through scrub pipe
-$wrappedCmd = "$envBlock; `$__r = ($modifiedCmd 2>&1); `$__ec = `$LASTEXITCODE; `$__r | & '$seeCrets' scrub-output; exit `$__ec"
+# Wrap: set env vars, use Invoke-Expression for reliable command execution from a string,
+# pipe through scrub, and preserve the original command's exit code.
+$escapedModCmd = $modifiedCmd -replace "'", "''"
+$wrappedCmd = "$envBlock; `$__r = (Invoke-Expression '$escapedModCmd' 2>&1); `$__ec = `$LASTEXITCODE; `$__r | & '$seeCrets' scrub-output; exit `$__ec"
 
 # Return updatedInput (allow with resolved command) — only Claude Code supports updatedInput.
-# Copilot CLI silently ignores it and runs the original unresolved command, so we deny instead.
+# For Copilot CLI: only deny when the original command had explicit {{SECRET:...}} placeholders.
+# If injection was only auto-inject (no placeholders), allow the original to run rather than
+# blocking unrelated commands simply because a mapped secret exists in the vault.
 if ($isClaude) {
     @{
         hookSpecificOutput = @{
@@ -119,6 +168,8 @@ if ($isClaude) {
         }
     } | ConvertTo-Json -Depth 4 -Compress -EscapeHandling EscapeNonAscii
 } else {
-    Deny 'Secret injection required. Copilot CLI does not support automatic secret injection. Pre-export the required secrets to your environment or use Claude Code for automatic injection.'
+    if ($hasPlaceholders) {
+        Deny 'Secret injection required. Copilot CLI does not support automatic secret injection. Pre-export the required secrets to your environment or use Claude Code for automatic injection.'
+    }
 }
 exit 0

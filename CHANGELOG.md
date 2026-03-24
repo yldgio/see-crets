@@ -14,12 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `plugin.json` at repo root: Copilot CLI plugin manifest wiring SKILL.md, tool-guard hooks, and pre-secrets hooks in one install step
   - `hooks/pre-secrets.sh` / `hooks/pre-secrets.ps1`: shared PreToolUse hooks for Copilot CLI and Claude Code — block OS vault CLI calls, resolve `{{SECRET:key}}` placeholders, auto-inject mapped vault keys, and scrub secret values from tool output
   - `hooks/hooks.json`: documentation descriptor for the `hooks/` directory
-  - `src/tools/inject-command.ts`: `see-crets inject` CLI subcommand (internal hook IPC — resolves placeholders and auto-injects vault keys into a command string)
+  - `src/tools/inject-command.ts`: `see-crets inject` CLI subcommand (internal hook IPC — resolves placeholders and auto-injects vault keys into a command string; supports `--no-auto-inject` flag)
   - `src/tools/scrub-output-command.ts`: `see-crets scrub-output` CLI subcommand (internal hook IPC — redacts vault values from stdin before returning to runtime)
 - **Vault CLI blocking rules** in `hooks/tool-guard/policy.json`: macOS `security` commands (find-generic-password, find-internet-password, find-certificate, dump-keychain, interactive mode), Windows cmdkey/vaultcmd, Linux libsecret/pass, 1Password CLI, KDE Wallet, and internal `see-crets inject`/`scrub-output` commands
 - **Claude Code wiring** in `.claude/settings.json`: pre-secrets hooks registered for Bash and PowerShell matchers alongside existing tool-guard hooks
-
-### Added
 - Full architectural design spec (`see-crets-design.md`)
 - Product requirements document with 32 user stories
 - 8-phase implementation plan
