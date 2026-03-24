@@ -1,9 +1,11 @@
+import { basename } from "path"
 import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin"
 import { askSecretSet } from "../tools/ask-secret-set.ts"
 import { secretsList } from "../tools/secrets-list.ts"
 import { secretsDetect } from "../tools/secrets-detect.ts"
 import { injectSecrets } from "../hook/inject.ts"
+import { resolveEnvMap, envVarForKey } from "../hook/env-map.ts"
 import { detectBackend } from "../vault/detect.ts"
 
 const SHELL_TOOLS = new Set(["bash", "powershell", "run_terminal_cmd", "shell"])
@@ -29,7 +31,7 @@ const pendingEnv = new Map<string, Record<string, string>>()
  *
  * delete, purge, and rotate are intentionally NOT registered as tools.
  */
-export const SecretsPlugin: Plugin = async () => {
+export const SecretsPlugin: Plugin = async ({ worktree }) => {
   return {
     tool: {
       ask_secret_set: tool({
@@ -44,14 +46,14 @@ export const SecretsPlugin: Plugin = async () => {
             .string()
             .describe(
               "Secret key name (e.g. 'github-token'). Auto-namespaced to the " +
-                "current project unless the name already contains a namespace prefix.",
+              "current project unless the name already contains a namespace prefix.",
             ),
           project: tool.schema
             .string()
             .optional()
             .describe(
               "Optional project namespace override. Defaults to the git-root " +
-                "basename or 'global'.",
+              "basename or 'global'.",
             ),
         },
         execute: async ({ key, project }) => {
@@ -72,7 +74,7 @@ export const SecretsPlugin: Plugin = async () => {
             .optional()
             .describe(
               "Optional project namespace override. Defaults to the git-root " +
-                "basename or 'global'.",
+              "basename or 'global'.",
             ),
         },
         execute: async ({ project }) => {
@@ -121,18 +123,51 @@ export const SecretsPlugin: Plugin = async () => {
 
     /**
      * Injects vault secrets as env vars into every subprocess spawned by OpenCode.
-     * All vault keys whose suffixes match the built-in env-var map (or .see-crets.json
-     * overrides) are automatically injected — no placeholder syntax needed.
+     *
+     * Scoped to the current project namespace + global/ only — prevents accidental
+     * cross-project secret exposure that would occur with a full backend.list("").
+     *
+     * Uses the plugin worktree (git root) as projectDir for .see-crets.json lookups
+     * so overrides are found regardless of the subprocess working directory.
+     *
      * Also merges in any placeholder-resolved vars from tool.execute.before.
      */
     "shell.env": async (input, output) => {
       try {
         const backend = await detectBackend()
-        const result = await injectSecrets("", backend, {
-          autoInject: true,
-          projectDir: input.cwd,
+
+        // Derive project name from worktree (which IS the git root)
+        const projectName = worktree ? basename(worktree) : ""
+        const prefixes: string[] = projectName
+          ? [`${projectName}/`, "global/"]
+          : ["global/"]
+
+        // Use worktree as projectDir so .see-crets.json is always found at the git root,
+        // not wherever the subprocess happens to be running (input.cwd).
+        const envMap = resolveEnvMap(worktree || input.cwd)
+
+        // List only the scoped prefixes — prevents cross-project exposure
+        const keysets = await Promise.all(prefixes.map((p) => backend.list(p)))
+        const allKeys = [...new Set(keysets.flat())]
+
+        // Project-namespaced keys take precedence over global/; alphabetical within each
+        const sortedKeys = [...allKeys].sort((a, b) => {
+          const aGlobal = a.startsWith("global/")
+          const bGlobal = b.startsWith("global/")
+          if (aGlobal !== bGlobal) return aGlobal ? 1 : -1
+          return a.localeCompare(b)
         })
-        Object.assign(output.env, result.env)
+
+        const seenVars = new Set<string>()
+        for (const qualifiedKey of sortedKeys) {
+          const targetVar = envVarForKey(qualifiedKey, envMap)
+          if (!targetVar) continue
+          if (seenVars.has(targetVar)) continue
+          const value = await backend.get(qualifiedKey)
+          if (value === null) continue
+          output.env[targetVar] = value
+          seenVars.add(targetVar)
+        }
       } catch {
         // Vault unavailable — fail open, don't block the subprocess
       }
