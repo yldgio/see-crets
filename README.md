@@ -179,7 +179,11 @@ Report which OS backend is active and its health.
 
 ```bash
 see-crets detect
-# {"available":true,"backend":"macos","detail":"macOS Keychain (healthy)"}
+# {
+#   "available": true,
+#   "backend": "macos",
+#   "detail": "macOS Keychain (healthy)"
+# }
 ```
 
 ### `see-crets delete <key>`
