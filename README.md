@@ -144,6 +144,8 @@ chmod +x /path/to/your-project/hooks/pre-secrets.sh \
 
 **Claude Code** — hooks are already installed as part of Tier 2 (`.claude/settings.json` references `hooks/` which was copied in Tier 2). No additional files to copy.
 
+> 📖 **Want a step-by-step narrative?** See the **[Walkthrough](WALKTHROUGH.md)** — a concrete end-to-end guide covering first secret, scrubbing, rotation, and `.env` migration.
+
 ---
 
 ## CLI Reference
