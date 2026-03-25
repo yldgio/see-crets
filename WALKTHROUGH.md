@@ -63,7 +63,7 @@ Add `dist/` to your `PATH`, or run `./dist/see-crets` directly.
 | **Tier 2 — Plugin** | Skill + runtime plugin | Structural enforcement — vault access only via plugin |
 | **Tier 3 — Full** | Skill + plugin + hooks | Enforced — hooks block raw vault CLIs; output scrubbing active |
 
-> This walkthrough uses a **Tier 1** setup for Steps 1–4. Step 5 (env injection) requires Tier 2. Step 6 (scrubbing) requires Tier 3.  
+> This walkthrough uses a **Tier 1** setup for Steps 1–4. Step 3 (env injection) requires Tier 2. Step 4 (scrubbing) requires Tier 3.  
 > See the [Quick Start](README.md#quick-start) for Tier 1 / 2 / 3 install commands.
 
 ---
@@ -80,7 +80,11 @@ Expected output:
 
 ```
 Enter value for 'my-app/github-token': ****
-{"stored": true, "key": "my-app/github-token", "namespace": "my-app"}
+{
+  "stored": true,
+  "key": "my-app/github-token",
+  "namespace": "my-app"
+}
 ```
 
 **What happened:**
@@ -102,8 +106,13 @@ see-crets list
 
 Expected output:
 
-```
-my-app/github-token
+```json
+{
+  "keys": [
+    "my-app/github-token"
+  ],
+  "namespace": "my-app"
+}
 ```
 
 **What the AI sees:**
@@ -213,7 +222,7 @@ The hook substitutes the placeholder with the real value before the subprocess r
 
 ## Step 4 — See Scrubbing in Action
 
-> 🔒 **Tier 3** — Output scrubbing requires the pre-secrets hook to be installed (included in Tier 2 for Copilot CLI and Claude Code; built into the OpenCode plugin at all tiers).
+> 🔒 **Tier 3** — Output scrubbing requires the pre-secrets hook. For Copilot CLI and Claude Code this hook is already copied during the Tier 2 setup, so scrubbing is active once you complete Tier 2. For OpenCode, scrubbing is built into the SecretsPlugin (also installed at Tier 2). No separate Tier 3 install step is needed for any runtime.
 
 Ask your agent to echo the token value back (a realistic mistake):
 
@@ -253,8 +262,12 @@ see-crets rotate github-token
 Expected output:
 
 ```
-Enter new value for 'my-app/github-token': ****
-{"rotated": true, "key": "my-app/github-token", "namespace": "my-app"}
+New value for 'my-app/github-token': ****
+{
+  "rotated": true,
+  "key": "my-app/github-token",
+  "namespace": "my-app"
+}
 ```
 
 **What happened:**
@@ -278,7 +291,7 @@ Migration is an interactive process: `see-crets set` always prompts for the valu
 # Print each key name from .env, then store it interactively
 while IFS='=' read -r key _; do
   # Skip blank lines and comments
-  [[ -z "$key" || "$key" == \#* ]] && continue
+  [[ -z "$key" || "$key" =~ ^# ]] && continue
   echo "→ Storing: $key"
   see-crets set "$key"
 done < .env
@@ -289,13 +302,25 @@ Expected output (one block per entry — you type the value at each prompt):
 ```
 → Storing: GITHUB_TOKEN
 Enter value for 'my-app/GITHUB_TOKEN': ****
-{"stored": true, "key": "my-app/GITHUB_TOKEN", "namespace": "my-app"}
+{
+  "stored": true,
+  "key": "my-app/GITHUB_TOKEN",
+  "namespace": "my-app"
+}
 → Storing: DATABASE_URL
 Enter value for 'my-app/DATABASE_URL': ****
-{"stored": true, "key": "my-app/DATABASE_URL", "namespace": "my-app"}
+{
+  "stored": true,
+  "key": "my-app/DATABASE_URL",
+  "namespace": "my-app"
+}
 → Storing: STRIPE_SECRET_KEY
 Enter value for 'my-app/STRIPE_SECRET_KEY': ****
-{"stored": true, "key": "my-app/STRIPE_SECRET_KEY", "namespace": "my-app"}
+{
+  "stored": true,
+  "key": "my-app/STRIPE_SECRET_KEY",
+  "namespace": "my-app"
+}
 ```
 
 ### Delete the .env file
@@ -330,10 +355,15 @@ see-crets list
 
 Expected output:
 
-```
-my-app/GITHUB_TOKEN
-my-app/DATABASE_URL
-my-app/STRIPE_SECRET_KEY
+```json
+{
+  "keys": [
+    "my-app/GITHUB_TOKEN",
+    "my-app/DATABASE_URL",
+    "my-app/STRIPE_SECRET_KEY"
+  ],
+  "namespace": "my-app"
+}
 ```
 
 Use this as your migration checklist — one line per entry you expect to see.
