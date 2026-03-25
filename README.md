@@ -114,9 +114,15 @@ mkdir -p /path/to/your-project/.opencode/plugins
 cp -r .opencode/plugins/see-crets/ /path/to/your-project/.opencode/plugins/see-crets/
 ```
 
-**GitHub Copilot CLI** — `plugin.json` at the repo root registers the skill and hooks. Copy it into your project root:
+**GitHub Copilot CLI** — `plugin.json` references `SKILL.md`, `.github/hooks/` (tool-guard), and `hooks/` (pre-secrets). All must be present relative to the project root. Copy all required files:
 ```bash
-cp plugin.json /path/to/your-project/plugin.json
+PROJECT=/path/to/your-project
+cp plugin.json "$PROJECT/"
+cp SKILL.md "$PROJECT/"
+cp -r .github/hooks/ "$PROJECT/.github/hooks/"
+cp -r hooks/ "$PROJECT/hooks/"
+chmod +x "$PROJECT/hooks/pre-secrets.sh" \
+         "$PROJECT/.github/hooks/scripts/pre-tool-guard.sh"   # macOS / Linux
 ```
 
 **Claude Code** — `plugin.json` and `.claude/settings.json` at the repo root wire up the hooks. Copy both into your project:
@@ -131,12 +137,7 @@ cp -r .claude/ /path/to/your-project/.claude/
 
 **OpenCode** — no extra hooks needed. The `SecretsPlugin` (installed in Tier 2) already handles placeholder resolution and env injection natively inside OpenCode's process. No shell hooks are used.
 
-**GitHub Copilot CLI** — copy the hooks directory into your project and make the scripts executable:
-```bash
-cp -r hooks/ /path/to/your-project/hooks/
-chmod +x hooks/pre-secrets.sh   # macOS / Linux
-```
-The hooks are already declared in `plugin.json` — no further wiring needed.
+**GitHub Copilot CLI** — hooks are already installed as part of Tier 2 (Copilot CLI's `plugin.json` bundles skill and hooks together). No additional files to copy.
 
 **Claude Code** — copy the hooks directory into your project:
 ```bash
@@ -192,7 +193,11 @@ Remove a secret from the vault. Human-initiated only — not callable by agents.
 
 ```bash
 see-crets delete github-token
-# {"deleted":true,"key":"my-project/github-token","namespace":"my-project"}
+# {
+#   "deleted": true,
+#   "key": "my-project/github-token",
+#   "namespace": "my-project"
+# }
 ```
 
 ### `see-crets purge`
@@ -399,11 +404,18 @@ see-crets/
 │   └── hooks/
 │       ├── pre-tool-guard.sh    # Tool-guard hook (bash)
 │       └── pre-tool-guard.ps1   # Tool-guard hook (PowerShell)
+├── .github/
+│   └── hooks/
+│       ├── tool-guard.json      # Copilot CLI tool-guard config
+│       └── scripts/
+│           ├── pre-tool-guard.sh    # Tool-guard hook (bash)
+│           └── pre-tool-guard.ps1   # Tool-guard hook (PowerShell)
 └── hooks/
-    ├── hooks.json               # Hook manifest
-    ├── tool-guard/              # Shared tool-guard scripts/config
-    ├── pre-secrets.sh           # Bash hook (macOS/Linux)
-    └── pre-secrets.ps1          # PowerShell hook (Windows)
+    ├── hooks.json               # Hook manifest (documentation descriptor)
+    ├── pre-secrets.sh           # Pre-secrets hook (bash, macOS/Linux)
+    ├── pre-secrets.ps1          # Pre-secrets hook (PowerShell, Windows)
+    └── tool-guard/
+        └── policy.json          # Shared tool-guard policy (all runtimes)
 ```
 
 ---
