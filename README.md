@@ -5,9 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue)]()
-[![Status](https://img.shields.io/badge/status-pre--release%20%2F%20design%20phase-orange)]()
-
-> **⚠️ Pre-release:** see-crets is in active design and early development. The architecture and CLI surface described below are finalised and implementation is underway — no release is available yet. Star or watch the repo to follow progress.
+[![Status](https://img.shields.io/badge/status-v0.1-green)]()
 
 ---
 
@@ -38,16 +36,14 @@ Neither is acceptable.
 
 ---
 
-## Planned Features
-
-> These capabilities are designed and specified — implementation is in progress. See the [Roadmap](#roadmap) for phase status.
+## Features
 
 - 🔐 **OS-native storage** — Keychain (macOS), Credential Manager (Windows), libsecret/pass (Linux). No files written to disk.
-- 🕵️ **Output scrubbing** — If a secret leaks into stdout/stderr, it will be replaced with `[REDACTED]` before the LLM sees it.
+- 🕵️ **Output scrubbing** — If a secret leaks into stdout/stderr, it is replaced with `[REDACTED]` before the LLM sees it.
 - 💉 **Two injection strategies** — Placeholder substitution (`{{SECRET:key}}`) and subprocess-scoped env injection (`VAR=value cmd`).
 - 🧰 **Three runtimes** — OpenCode, GitHub Copilot CLI, Claude Code.
 - 📈 **Graduated enforcement** — Start with a single Markdown file (Tier 1). Add a plugin (Tier 2). Add hooks for full enforcement (Tier 3).
-- 🔑 **Auto-namespacing** — Secrets will be automatically scoped to your project via `git rev-parse --show-toplevel`.
+- 🔑 **Auto-namespacing** — Secrets are automatically scoped to your project via `git rev-parse --show-toplevel`.
 - ⚙️ **Built-in env map** — 20+ common service keys (`github-token → GITHUB_TOKEN`, `openai-api-key → OPENAI_API_KEY`, etc.) with per-project overrides.
 
 ---
@@ -62,77 +58,93 @@ Neither is acceptable.
 
 ---
 
-## Quick Start (planned)
+## Quick Start
 
-> **Not yet released.** The steps below reflect the intended installation experience once the CLI is published. Follow the repo to be notified when v0.1 ships.
+### Prerequisites
+
+- [Bun](https://bun.sh) >= 1.0
+
+### Build from source
+
+```bash
+git clone https://github.com/yldgio/see-crets
+cd see-crets
+bun install
+bun run build         # produces dist/see-crets (or dist/see-crets.exe on Windows)
+```
+
+Add `dist/` to your `PATH`, or run `./dist/see-crets` directly.
 
 ### Tier 1 — Skill only (2 minutes)
 
-1. Clone or install `see-crets`:
-   ```bash
-   # Using bun (recommended)
-   bun install -g see-crets
+The skill file tells your AI agent how to use `see-crets` and enforces the no-secret-values rule behaviourally.
 
-   # Or clone the repo
-   git clone https://github.com/yldgio/see-crets
-   ```
+**GitHub Copilot CLI** — drop the skill file into your project's agents config:
+```bash
+mkdir -p .agents/skills/see-crets
+cp SKILL.md .agents/skills/see-crets/SKILL.md
+```
 
-2. Copy the skill file to your agent's config directory:
-   ```bash
-   # GitHub Copilot CLI
-   cp SKILL.md ~/.copilot/skills/see-crets.md
+**Claude Code** — reference it from your project's `CLAUDE.md` or system prompt:
+```bash
+cat SKILL.md >> CLAUDE.md
+```
 
-   # Claude Code
-   cp SKILL.md ~/.claude/skills/see-crets.md
+**OpenCode** — add to your project's `.opencode/rules/` directory:
+```bash
+mkdir -p .opencode/rules
+cp SKILL.md .opencode/rules/see-crets.md
+```
 
-   # OpenCode
-   cp SKILL.md ~/.opencode/skills/see-crets.md
-   ```
+Then store your first secret:
+```bash
+see-crets set github-token
+# Prompts: Enter value for 'my-project/github-token': ****
+```
 
-3. Store your first secret:
-   ```bash
-   see-crets set github-token
-   # Prompts: Enter value for 'my-project/github-token': ****
-   ```
-
-4. Ask your agent to use it — it will call `secrets_list` to discover what's available and `{{SECRET:github-token}}` placeholders to reference them in commands.
+Your agent can now call `see-crets list` to discover available keys and use `{{SECRET:github-token}}` placeholders in commands.
 
 ### Tier 2 — Plugin (adds structural enforcement)
 
-Install the runtime plugin for your agent:
-
-**OpenCode:**
+**OpenCode** — the plugin ships in `.opencode/plugins/see-crets/`. OpenCode auto-discovers plugins in `.opencode/plugins/*/index.ts`. Copy into your project:
 ```bash
-cp -r .opencode/ ~/.opencode/plugins/see-crets/
+cp -r .opencode/plugins/see-crets/ /path/to/your-project/.opencode/plugins/see-crets/
 ```
 
-**GitHub Copilot CLI:**
+**GitHub Copilot CLI** — `plugin.json` at the repo root registers the skill and hooks. Copy it into your project root:
 ```bash
-cp plugin.json ~/.copilot/plugins/see-crets.json
+cp plugin.json /path/to/your-project/plugin.json
 ```
 
-**Claude Code:**
+**Claude Code** — `plugin.json` and `.claude/settings.json` at the repo root wire up the hooks. Copy both into your project:
 ```bash
-cp -r .claude-plugin/ ~/.claude/plugins/see-crets/
+cp plugin.json /path/to/your-project/plugin.json
+cp -r .claude/ /path/to/your-project/.claude/
 ```
 
 ### Tier 3 — Hooks (full enforcement + output scrubbing)
 
-```bash
-# macOS / Linux — adds pre-execution hook to your agent config
-cp hooks/pre-secrets.sh ~/.config/agent-hooks/
-cp hooks/hooks.json ~/.config/agent-hooks/
+Copy the hooks directory into your project:
 
-# Windows — PowerShell equivalent
-cp hooks/pre-secrets.ps1 $env:APPDATA\agent-hooks\
-cp hooks/hooks.json $env:APPDATA\agent-hooks\
+```bash
+cp -r hooks/ /path/to/your-project/hooks/
 ```
+
+**macOS / Linux** — hooks are shell scripts that run before every tool call:
+```bash
+chmod +x hooks/pre-secrets.sh
+```
+
+**Windows** — PowerShell equivalents are included:
+```powershell
+# hooks/pre-secrets.ps1 is used automatically via plugin.json / .claude/settings.json
+```
+
+The hooks are declared in `plugin.json` (for Copilot CLI) and `.claude/settings.json` (for Claude Code). No further wiring is needed after copying.
 
 ---
 
-## CLI Reference (planned)
-
-> Commands below reflect the finalised CLI design. Implementation begins in Phase 1.
+## CLI Reference
 
 ### `see-crets set <key>`
 
@@ -163,8 +175,7 @@ Report which OS backend is active and its health.
 
 ```bash
 see-crets detect
-# Backend: macOS Keychain (healthy)
-# Project namespace: my-project (from git root)
+# {"available":true,"backend":"macos","detail":"macOS Keychain (healthy)"}
 ```
 
 ### `see-crets delete <key>`
@@ -212,9 +223,9 @@ see-crets set db-pass --project staging # → staging/db-pass (explicit override
 
 ---
 
-## Injection Strategies (planned)
+## Injection Strategies
 
-Two complementary methods will ensure secret values never reach the LLM.
+Two complementary methods ensure secret values never reach the LLM.
 
 ### Strategy A — Placeholder Substitution
 
@@ -259,6 +270,16 @@ Common service keys are automatically mapped to their conventional env var names
 | `openai-api-key` | `OPENAI_API_KEY` |
 | `anthropic-api-key` | `ANTHROPIC_API_KEY` |
 | `slack-token` | `SLACK_TOKEN` |
+| `stripe-secret-key` | `STRIPE_SECRET_KEY` |
+| `sendgrid-api-key` | `SENDGRID_API_KEY` |
+| `twilio-auth-token` | `TWILIO_AUTH_TOKEN` |
+| `firebase-service-account` | `FIREBASE_SERVICE_ACCOUNT` |
+| `google-application-credentials` | `GOOGLE_APPLICATION_CREDENTIALS` |
+| `gcp-service-account` | `GOOGLE_APPLICATION_CREDENTIALS` |
+| `azure-client-secret` | `AZURE_CLIENT_SECRET` |
+| `azure-tenant-id` | `AZURE_TENANT_ID` |
+| `azure-client-id` | `AZURE_CLIENT_ID` |
+| `heroku-api-key` | `HEROKU_API_KEY` |
 
 ### Per-Project Override
 
@@ -266,7 +287,7 @@ Create `.see-crets.json` in your project root (safe to commit — no secrets ins
 
 ```json
 {
-  "envMap": {
+  "map": {
     "my-custom-token": "MY_TOKEN",
     "db-password": "PGPASSWORD"
   }
@@ -332,12 +353,11 @@ On Linux, `see-crets detect` tells you which backend is active and how to instal
 ```
 see-crets/
 ├── SKILL.md                     # Tier 1: shared behavioral skill (all runtimes)
-├── plugin.json                  # Copilot CLI plugin manifest
-├── .claude-plugin/plugin.json   # Claude Code plugin manifest
+├── plugin.json                  # Copilot CLI + Claude Code plugin manifest
 ├── src/
 │   ├── cli.ts                   # CLI entry point
 │   ├── runtimes/
-│   │   └── opencode.ts          # OpenCode native plugin
+│   │   └── opencode.ts          # OpenCode native plugin (SecretsPlugin)
 │   ├── vault/
 │   │   ├── detect.ts            # OS detection → select backend
 │   │   ├── macos.ts             # Keychain
@@ -346,13 +366,21 @@ see-crets/
 │   ├── tools/                   # Shared logic (CLI + plugins)
 │   │   ├── ask-secret-set.ts
 │   │   ├── secrets-list.ts
-│   │   ├── secrets-detect.ts
-│   │   └── secrets-rotate.ts
+│   │   └── secrets-detect.ts
 │   └── hook/
 │       ├── inject.ts            # Placeholder resolution + env injection
-│       └── scrub.ts             # Output redaction
+│       ├── scrub.ts             # Output redaction
+│       └── env-map.ts           # Built-in + per-project env var mappings
+├── .opencode/
+│   └── plugins/
+│       └── see-crets/
+│           └── index.ts         # OpenCode plugin entry point (re-exports SecretsPlugin)
+├── .claude/
+│   ├── settings.json            # Claude Code hook wiring
+│   └── hooks/
+│       ├── pre-tool-guard.sh    # Tool-guard hook (bash)
+│       └── pre-tool-guard.ps1   # Tool-guard hook (PowerShell)
 └── hooks/
-    ├── hooks.json               # Hook config (Claude Code + Copilot CLI)
     ├── pre-secrets.sh           # Bash hook (macOS/Linux)
     └── pre-secrets.ps1          # PowerShell hook (Windows)
 ```
@@ -408,14 +436,14 @@ To report a security vulnerability, please read [SECURITY.md](SECURITY.md). **Do
 ## Roadmap
 
 - [x] Design and architecture
-- [ ] Phase 1: Walking skeleton (Windows CLI — `set` + `list`)
-- [ ] Phase 2: Cross-platform vault backends (macOS + Linux)
-- [ ] Phase 3: Injection and output scrubbing (security core)
-- [ ] Phase 4: Env var mapping (built-in + per-project)
-- [ ] Phase 5: Secret management and namespacing
-- [ ] Phase 6: OpenCode native plugin (Tier 2)
-- [ ] Phase 7: Tier 3 hooks and plugin manifests
-- [ ] Phase 8: Documentation and distribution
+- [x] Phase 1: Walking skeleton (Windows CLI — `set` + `list`)
+- [x] Phase 2: Cross-platform vault backends (macOS + Linux)
+- [x] Phase 3: Injection and output scrubbing (security core)
+- [x] Phase 4: Env var mapping (built-in + per-project)
+- [x] Phase 5: Secret management and namespacing
+- [x] Phase 6: OpenCode native plugin (Tier 2)
+- [x] Phase 7: Tier 3 hooks and plugin manifests
+- [x] Phase 8: Documentation and distribution
 - [ ] v2: Environment namespacing (dev/staging/prod)
 - [ ] v2: Cross-project access controls
 - [ ] v2: Third-party vault backends (1Password, Bitwarden)
