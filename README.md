@@ -110,6 +110,7 @@ Your agent can now call `see-crets list` to discover available keys and use `{{S
 
 **OpenCode** — the plugin ships in `.opencode/plugins/see-crets/`. OpenCode auto-discovers plugins in `.opencode/plugins/*/index.ts`. Copy into your project:
 ```bash
+mkdir -p /path/to/your-project/.opencode/plugins
 cp -r .opencode/plugins/see-crets/ /path/to/your-project/.opencode/plugins/see-crets/
 ```
 
