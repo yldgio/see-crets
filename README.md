@@ -85,16 +85,17 @@ mkdir -p .agents/skills/see-crets
 cp SKILL.md .agents/skills/see-crets/SKILL.md
 ```
 
-**Claude Code** — reference it from your project's `CLAUDE.md` or system prompt:
+**Claude Code** — install as a named skill so Claude auto-applies it when relevant:
 ```bash
-cat SKILL.md >> CLAUDE.md
+mkdir -p .claude/skills/see-crets
+cp SKILL.md .claude/skills/see-crets/SKILL.md
 ```
 
-**OpenCode** — add to your project's `.opencode/rules/` directory:
+**OpenCode** — append to your project's `AGENTS.md` (OpenCode's rules file):
 ```bash
-mkdir -p .opencode/rules
-cp SKILL.md .opencode/rules/see-crets.md
+cat SKILL.md >> AGENTS.md
 ```
+Or reference it from `opencode.json` without copying: add `"instructions": ["SKILL.md"]` to your `opencode.json`.
 
 Then store your first secret:
 ```bash
@@ -125,10 +126,12 @@ chmod +x "$PROJECT/hooks/pre-secrets.sh" \
          "$PROJECT/.github/hooks/scripts/pre-tool-guard.sh"   # macOS / Linux
 ```
 
-**Claude Code** — `plugin.json` and `.claude/settings.json` at the repo root wire up the hooks. Copy both into your project:
+**Claude Code** — `.claude/settings.json` wires the hooks via `$CLAUDE_PROJECT_DIR`. Copy `.claude/` and `hooks/` into your project (both are needed: `settings.json` references `hooks/pre-secrets.*`). Note: `plugin.json` is for Copilot CLI only and is not used by Claude Code:
 ```bash
-cp plugin.json /path/to/your-project/plugin.json
 cp -r .claude/ /path/to/your-project/.claude/
+cp -r hooks/ /path/to/your-project/hooks/
+chmod +x /path/to/your-project/hooks/pre-secrets.sh \
+         /path/to/your-project/.claude/hooks/pre-tool-guard.sh   # macOS / Linux
 ```
 
 ### Tier 3 — Hooks (full enforcement + output scrubbing)
@@ -139,13 +142,7 @@ cp -r .claude/ /path/to/your-project/.claude/
 
 **GitHub Copilot CLI** — hooks are already installed as part of Tier 2 (Copilot CLI's `plugin.json` bundles skill and hooks together). No additional files to copy.
 
-**Claude Code** — copy the hooks directory into your project:
-```bash
-cp -r hooks/ /path/to/your-project/hooks/
-chmod +x hooks/pre-secrets.sh   # macOS / Linux
-# hooks/pre-secrets.ps1 is used automatically on Windows
-```
-The hooks are already wired in `.claude/settings.json` — no further wiring needed.
+**Claude Code** — hooks are already installed as part of Tier 2 (`.claude/settings.json` references `hooks/` which was copied in Tier 2). No additional files to copy.
 
 ---
 
@@ -378,7 +375,7 @@ On Linux, `see-crets detect` tells you which backend is active and how to instal
 ```
 see-crets/
 ├── SKILL.md                     # Tier 1: shared behavioral skill (all runtimes)
-├── plugin.json                  # Copilot CLI + Claude Code plugin manifest
+├── plugin.json                  # Copilot CLI plugin manifest (skill + hooks)
 ├── src/
 │   ├── cli.ts                   # CLI entry point
 │   ├── runtimes/
