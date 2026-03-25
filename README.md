@@ -391,12 +391,13 @@ see-crets/
 │   └── plugins/
 │       └── see-crets/
 │           └── index.ts         # OpenCode plugin entry point (re-exports SecretsPlugin)
-├── .claude/
-│   ├── settings.json            # Claude Code hook wiring
+├── .github/
 │   └── hooks/
 │       ├── pre-tool-guard.sh    # Tool-guard hook (bash)
 │       └── pre-tool-guard.ps1   # Tool-guard hook (PowerShell)
 └── hooks/
+    ├── hooks.json               # Hook manifest
+    ├── tool-guard/              # Shared tool-guard scripts/config
     ├── pre-secrets.sh           # Bash hook (macOS/Linux)
     └── pre-secrets.ps1          # PowerShell hook (Windows)
 ```
