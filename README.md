@@ -73,7 +73,7 @@ bun install
 bun run build         # produces dist/see-crets (or dist/see-crets.exe on Windows)
 ```
 
-Add `dist/` to your `PATH`, or run `./dist/see-crets` directly.
+Add `dist/` to your `PATH`, or run `./dist/see-crets` directly. The compiled binary includes the Bun runtime — no Bun or Node.js installation is required on the target machine.
 
 ### Tier 1 — Skill only (2 minutes)
 
@@ -106,6 +106,8 @@ Your agent can now call `see-crets list` to discover available keys and use `{{S
 
 ### Tier 2 — Plugin (adds structural enforcement)
 
+> Tier 2 builds on Tier 1 — complete Tier 1 setup first.
+
 **OpenCode** — the plugin ships in `.opencode/plugins/see-crets/`. OpenCode auto-discovers plugins in `.opencode/plugins/*/index.ts`. Copy into your project:
 ```bash
 cp -r .opencode/plugins/see-crets/ /path/to/your-project/.opencode/plugins/see-crets/
@@ -124,23 +126,24 @@ cp -r .claude/ /path/to/your-project/.claude/
 
 ### Tier 3 — Hooks (full enforcement + output scrubbing)
 
-Copy the hooks directory into your project:
+> Tier 3 builds on Tier 2 — complete Tier 2 setup first.
 
+**OpenCode** — no extra hooks needed. The `SecretsPlugin` (installed in Tier 2) already handles placeholder resolution and env injection natively inside OpenCode's process. No shell hooks are used.
+
+**GitHub Copilot CLI** — copy the hooks directory into your project and make the scripts executable:
 ```bash
 cp -r hooks/ /path/to/your-project/hooks/
+chmod +x hooks/pre-secrets.sh   # macOS / Linux
 ```
+The hooks are already declared in `plugin.json` — no further wiring needed.
 
-**macOS / Linux** — hooks are shell scripts that run before every tool call:
+**Claude Code** — copy the hooks directory into your project:
 ```bash
-chmod +x hooks/pre-secrets.sh
+cp -r hooks/ /path/to/your-project/hooks/
+chmod +x hooks/pre-secrets.sh   # macOS / Linux
+# hooks/pre-secrets.ps1 is used automatically on Windows
 ```
-
-**Windows** — PowerShell equivalents are included:
-```powershell
-# hooks/pre-secrets.ps1 is used automatically via plugin.json / .claude/settings.json
-```
-
-The hooks are declared in `plugin.json` (for Copilot CLI) and `.claude/settings.json` (for Claude Code). No further wiring is needed after copying.
+The hooks are already wired in `.claude/settings.json` — no further wiring needed.
 
 ---
 
@@ -184,6 +187,7 @@ Remove a secret from the vault. Human-initiated only — not callable by agents.
 
 ```bash
 see-crets delete github-token
+# {"deleted":true,"key":"my-project/github-token","namespace":"my-project"}
 ```
 
 ### `see-crets purge`
@@ -287,12 +291,19 @@ Create `.see-crets.json` in your project root (safe to commit — no secrets ins
 
 ```json
 {
+  "_comment": "see-crets env-var mapping config. Safe to commit — contains mappings only, never secret values.",
+  "_docs": "https://github.com/yldgio/see-crets#env-var-mapping",
+
   "map": {
     "my-custom-token": "MY_TOKEN",
-    "db-password": "PGPASSWORD"
+    "db-password": "PGPASSWORD",
+
+    "github-token": "GH_TOKEN"
   }
 }
 ```
+
+Keys in `map` are vault key-name suffixes (the part after the last `/`). Values are the env var to inject. You can also **override built-in mappings** — for example, setting `"github-token": "GH_TOKEN"` makes see-crets inject `GH_TOKEN` instead of the default `GITHUB_TOKEN`. Copy `.see-crets.json.example` from this repo as a starting point.
 
 Project overrides take precedence over built-in mappings.
 
@@ -332,9 +343,13 @@ On Linux, `see-crets detect` tells you which backend is active and how to instal
 ### What is NOT in scope for v1
 
 - Environment namespacing (dev/staging/prod) — planned for v2
+- Config-file injection (injecting secrets into `.env` files or config files) — planned for v2
 - Cross-project access controls — planned for v2
+- Compound credential assembly (building multi-part credentials from vault keys) — planned for v2
 - Third-party password manager backends (1Password, Bitwarden) — planned for v2
 - MCP server protocol — planned for v2
+- GUI / desktop application — out of scope
+- Secret sharing between users or machines — out of scope
 
 ---
 
