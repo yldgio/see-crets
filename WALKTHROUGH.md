@@ -63,7 +63,7 @@ Add `dist/` to your `PATH`, or run `./dist/see-crets` directly.
 | **Tier 2 — Plugin** | Skill + runtime plugin | Structural enforcement — vault access only via plugin |
 | **Tier 3 — Full** | Skill + plugin + hooks | Enforced — hooks block raw vault CLIs; output scrubbing active |
 
-> This walkthrough uses a **Tier 1** setup for Steps 1–4. Step 3 (env injection) requires Tier 2. Step 4 (scrubbing) requires Tier 3.  
+> This walkthrough uses a **Tier 1** setup for Steps 1–2. Step 3 (env injection and placeholder substitution) requires Tier 2 or higher. Step 4 (output scrubbing) requires Tier 3 — though for Claude Code and OpenCode, Tier 2 already includes the scrubbing plugin, so no extra step is needed. **GitHub Copilot CLI does not support placeholder substitution, automatic env injection, or output scrubbing** — see the Copilot CLI note in Step 3 for the manual workaround.  
 > See the [Quick Start](README.md#quick-start) for Tier 1 / 2 / 3 install commands.
 
 ---
@@ -145,9 +145,12 @@ Write `{{SECRET:key}}` in the command. The hook resolves the value before execut
 curl -H "Authorization: Bearer {{SECRET:my-app/github-token}}" \
   https://api.github.com/user
 
-# Hook resolves before execution:
-curl -H "Authorization: Bearer ghp_abc123..." \
+# Hook rewrites the command (secret never appears in argv):
+curl -H "Authorization: Bearer ${_SC_0}" \
   https://api.github.com/user
+
+# ...and sets a subprocess-scoped env var (not visible in argv):
+_SC_0='ghp_abc123...'  # passed via the env map, dies with the subprocess
 ```
 
 > 🔒 **Tier 2+** — Placeholder resolution requires the runtime plugin (or hook) to be installed.
@@ -200,43 +203,55 @@ cp -r .opencode/plugins/see-crets/ \
       /path/to/my-app/.opencode/plugins/see-crets/
 ```
 
-Once wired, the placeholder and env-injection strategies work identically across all three runtimes.
+Once wired, the placeholder and env-injection strategies work identically for **Claude Code** and **OpenCode**.
+
+**GitHub Copilot CLI limitation:** The pre-secrets hook cannot apply `updatedInput`, and it refuses to run any command that still contains `{{SECRET:...}}` placeholders; automatic env injection is not available either. To use see-crets with Copilot CLI, resolve secrets into environment variables yourself (for example, by running `see-crets export` and then `export`/`eval`ing the result in your shell) and have Copilot CLI generate commands that reference those env vars (such as `$GITHUB_TOKEN`) instead of `{{SECRET:...}}` placeholders.
 
 ### A concrete fetch() example
 
-Here is what a complete Node.js API call looks like from the agent's perspective:
+Here is what a complete Node.js API call looks like from the agent's perspective using env-var injection (Strategy B). Placeholders work only in shell commands — they are **not** substituted inside source-code strings:
 
 ```javascript
-// Agent writes this code — no secret value anywhere:
+// Agent writes this code — reads the injected env var, not a placeholder:
 const response = await fetch("https://api.github.com/repos/my-org/my-app", {
   headers: {
-    Authorization: `Bearer {{SECRET:my-app/github-token}}`,
+    Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
     Accept: "application/vnd.github+json",
   },
 });
 ```
 
-The hook substitutes the placeholder with the real value before the subprocess runs. The agent never sees `ghp_abc123...`.
+The hook injects `GITHUB_TOKEN` into the subprocess environment before the script runs. `process.env.GITHUB_TOKEN` resolves to the real value at runtime; the agent never sees `ghp_abc123...`.
 
 ---
 
 ## Step 4 — See Scrubbing in Action
 
-> 🔒 **Tier 3** — Output scrubbing requires the pre-secrets hook. For Copilot CLI and Claude Code this hook is already copied during the Tier 2 setup, so scrubbing is active once you complete Tier 2. For OpenCode, scrubbing is built into the SecretsPlugin (also installed at Tier 2). No separate Tier 3 install step is needed for any runtime.
+> 🔒 **Tier 3** — Output scrubbing is applied by the pre-secrets hook to tool stdout/stderr **before** the output reaches the LLM. For Claude Code and OpenCode, the hook/plugin is already installed at Tier 2, so scrubbing is active once you complete Tier 2. **GitHub Copilot CLI cannot apply output scrubbing** because it does not support `updatedInput` — the raw tool output reaches the LLM unchanged. No separate Tier 3 install step is needed for Claude Code or OpenCode.
 
-Ask your agent to echo the token value back (a realistic mistake):
+Ask your agent to run a command that leaks the token value in its output (a realistic mistake):
 
-**Without see-crets (or Tier 1/2 only):**
+**Without see-crets (or Tier 1/2 only, and always for Copilot CLI):**
 
 ```
-# AI agent response
+# Tool output returned to the LLM:
+GITHUB_TOKEN=ghp_abc123...
+```
+
+```
+# LLM response based on that unredacted output:
 The GitHub token is: ghp_abc123...
 ```
 
-**With see-crets (Tier 3 active):**
+**With see-crets (Tier 3 active — Claude Code or OpenCode):**
 
 ```
-# AI agent response
+# Tool output after scrubbing (what the LLM actually receives):
+GITHUB_TOKEN=[REDACTED]
+```
+
+```
+# LLM response based on the redacted output:
 The GitHub token is: [REDACTED]
 ```
 
@@ -322,6 +337,11 @@ Enter value for 'my-app/STRIPE_SECRET_KEY': ****
   "namespace": "my-app"
 }
 ```
+
+> ⚠️ **Auto env-var injection and uppercase key names:** The built-in injection map matches lowercase key-name suffixes (e.g. `github-token → GITHUB_TOKEN`). Keys imported as `my-app/GITHUB_TOKEN` (all-caps) **will not be auto-injected** — the suffix `GITHUB_TOKEN` does not match the built-in entry `github-token`. After migration, either:
+> - Rename the keys to lowercase (`see-crets set github-token`, then delete the old uppercase key), **or**
+> - Add an explicit mapping in `.see-crets.json`: `"GITHUB_TOKEN": "GITHUB_TOKEN"` (Step 7 covers this).
+> Placeholder substitution (`{{SECRET:my-app/GITHUB_TOKEN}}`) still works regardless of case.
 
 ### Delete the .env file
 
