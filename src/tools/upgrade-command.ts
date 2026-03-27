@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { rename, writeFile, chmod } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execSync } from "child_process";
 import { join, dirname } from "node:path";
 import { isCompiledBinary } from "./uninstall-command.ts";
 
@@ -33,11 +34,19 @@ export interface UpgradeOptions {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns `true` when running on Alpine Linux (musl libc).
- * Detects via the presence of `/etc/alpine-release`.
+ * Returns `true` when running on a musl libc system.
+ * Detects via the presence of `/etc/alpine-release` (Alpine Linux) or
+ * by running `ldd --version` and checking for "musl" in the output
+ * (covers Void Linux, Chimera, and other non-Alpine musl distros).
  */
 export function isMusl(): boolean {
-  return existsSync("/etc/alpine-release");
+  if (existsSync("/etc/alpine-release")) return true;
+  try {
+    const ldd = execSync("ldd --version 2>&1", { encoding: "utf8", timeout: 2000 });
+    return ldd.includes("musl");
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -50,8 +59,8 @@ export function getAssetName(
   musl: boolean = isMusl(),
 ): string {
   if (platform === "darwin") {
-    if (arch === "arm64") return "see-crets-darwin-arm64";
-    if (arch === "x64") return "see-crets-darwin-x64";
+    if (arch === "arm64") return "see-crets-macos-arm64";
+    if (arch === "x64") return "see-crets-macos-x64";
     throw new Error(`Unsupported architecture on macOS: ${arch}`);
   }
 
@@ -231,27 +240,36 @@ export async function downloadAndReplaceBinary(
 // ---------------------------------------------------------------------------
 
 /**
- * Compares two semver strings (major.minor.patch).
+ * Compares two semver strings (major.minor.patch[-prerelease]).
  * Returns  1 if a > b
  *          0 if a === b
  *         -1 if a < b
- * Non-numeric or malformed parts are treated as 0.
+ *
+ * Pre-release suffixes are handled per the semver spec: a pre-release version
+ * is always less than the corresponding release (`1.0.0-beta.1 < 1.0.0`).
+ * Missing or non-numeric parts are treated as 0.
  */
 export function semverCompare(a: string, b: string): 1 | 0 | -1 {
-  const parse = (v: string) =>
-    v.split(".").map((n) => parseInt(n, 10) || 0);
+  // Strip pre-release suffix before numeric comparison;
+  // strip build metadata first so "1.0.0+build-1" isn't misclassified as pre-release
+  const stripBuild = (v: string) => v.replace(/\+.*$/, "");
+  const stripPre = (v: string) => stripBuild(v).replace(/-.*$/, "");
+  const aHasPre = stripBuild(a).includes("-");
+  const bHasPre = stripBuild(b).includes("-");
 
-  const [aMajor, aMinor, aPatch] = parse(a);
-  const [bMajor, bMinor, bPatch] = parse(b);
+  const aParts = stripPre(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const bParts = stripPre(b).split(".").map((n) => parseInt(n, 10) || 0);
 
-  for (const [av, bv] of [
-    [aMajor, bMajor],
-    [aMinor, bMinor],
-    [aPatch, bPatch],
-  ] as [number, number][]) {
+  for (let i = 0; i < 3; i++) {
+    const av = aParts[i] ?? 0;
+    const bv = bParts[i] ?? 0;
     if (av > bv) return 1;
     if (av < bv) return -1;
   }
+
+  // Numeric parts are equal — pre-release < release per semver spec
+  if (aHasPre && !bHasPre) return -1;
+  if (!aHasPre && bHasPre) return 1;
   return 0;
 }
 
