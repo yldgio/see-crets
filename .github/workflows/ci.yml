@@ -42,12 +42,20 @@ jobs:
       - name: Build binary
         run: bun run build
 
-      - name: Validate install.ps1 syntax (Windows only)
+      - name: Validate install.ps1 syntax (PS 5.1)
         if: matrix.os == 'windows-latest'
         shell: powershell
         run: |
           [scriptblock]::Create((Get-Content '.\install.ps1' -Raw)) | Out-Null
-          Write-Host "install.ps1 syntax OK"
+          Write-Host "install.ps1 syntax OK (PS 5.1)"
+
+      # Full integration test requires published release assets — deferred until first v*.*.* tag
+      - name: Validate install.ps1 syntax (PS 7+)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content '.\install.ps1' -Raw)) | Out-Null
+          Write-Host "install.ps1 syntax OK (PS 7+)"
 
   install-sh:
     name: install.sh (shellcheck)

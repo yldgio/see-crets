@@ -42,12 +42,11 @@ function Remove-TmpDir {
 
 function Exit-Fatal {
     param(
-        [string]$Message,
-        [int]$Code = 1
+        [string]$Message
     )
     Write-Host "ERROR: $Message" -ForegroundColor Red
     Remove-TmpDir
-    exit $Code
+    throw $Message
 }
 
 # ─── Architecture detection ──────────────────────────────────────────────────
@@ -86,10 +85,16 @@ if (-not [string]::IsNullOrWhiteSpace($env:VERSION)) {
 } else {
     Write-Host "Fetching latest release version..."
     try {
-        $releaseInfo = Invoke-RestMethod `
-            -Uri 'https://api.github.com/repos/yldgio/see-crets/releases/latest' `
-            -UseBasicParsing `
-            -ErrorAction Stop
+        if ($PSVersionTable.PSVersion.Major -lt 6) {
+            $releaseInfo = Invoke-RestMethod `
+                -Uri 'https://api.github.com/repos/yldgio/see-crets/releases/latest' `
+                -UseBasicParsing `
+                -ErrorAction Stop
+        } else {
+            $releaseInfo = Invoke-RestMethod `
+                -Uri 'https://api.github.com/repos/yldgio/see-crets/releases/latest' `
+                -ErrorAction Stop
+        }
         $Version = ([string]$releaseInfo.tag_name).TrimStart('v')
         if ([string]::IsNullOrWhiteSpace($Version)) {
             Exit-Fatal "GitHub API returned an empty or invalid version tag. Use `$env:VERSION` to pin a version."
@@ -125,22 +130,36 @@ $checksumPath = Join-Path $Script:_tmpDir 'checksums.txt'
 
 Write-Host "Downloading $assetName..."
 try {
-    Invoke-WebRequest `
-        -Uri     "$baseUrl/$assetName" `
-        -OutFile $binaryPath `
-        -UseBasicParsing `
-        -ErrorAction Stop
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        Invoke-WebRequest `
+            -Uri     "$baseUrl/$assetName" `
+            -OutFile $binaryPath `
+            -UseBasicParsing `
+            -ErrorAction Stop
+    } else {
+        Invoke-WebRequest `
+            -Uri     "$baseUrl/$assetName" `
+            -OutFile $binaryPath `
+            -ErrorAction Stop
+    }
 } catch {
     Exit-Fatal "Download failed for '$assetName': $_"
 }
 
 Write-Host "Downloading checksums.txt..."
 try {
-    Invoke-WebRequest `
-        -Uri     "$baseUrl/checksums.txt" `
-        -OutFile $checksumPath `
-        -UseBasicParsing `
-        -ErrorAction Stop
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        Invoke-WebRequest `
+            -Uri     "$baseUrl/checksums.txt" `
+            -OutFile $checksumPath `
+            -UseBasicParsing `
+            -ErrorAction Stop
+    } else {
+        Invoke-WebRequest `
+            -Uri     "$baseUrl/checksums.txt" `
+            -OutFile $checksumPath `
+            -ErrorAction Stop
+    }
 } catch {
     Exit-Fatal "Download failed for 'checksums.txt': $_"
 }
@@ -187,13 +206,16 @@ if (-not [string]::IsNullOrWhiteSpace($Prefix)) {
     $installDir = Join-Path $env:USERPROFILE '.see-crets\bin'
 }
 
-Write-Host "Installing to $installDir ..."
-New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-
-$installPath = Join-Path $installDir 'see-crets.exe'
-Copy-Item -Path $binaryPath -Destination $installPath -Force -ErrorAction Stop
-
-Remove-TmpDir
+try {
+    Write-Host "Installing to $installDir ..."
+    New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+    $installPath = Join-Path $installDir 'see-crets.exe'
+    Copy-Item -Path $binaryPath -Destination $installPath -Force -ErrorAction Stop
+} catch {
+    Exit-Fatal "Failed to install to '$installDir': $($_.Exception.Message)"
+} finally {
+    Remove-TmpDir
+}
 
 Write-Host "Installed: $installPath"
 
