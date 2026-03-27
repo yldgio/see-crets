@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, spyOn, beforeEach, afterEach } from "bun:test";
 import {
   isCompiledBinary,
   uninstallBinary,
@@ -52,6 +52,14 @@ describe("isCompiledBinary", () => {
 
   it("returns true for any non-bun/non-node binary name", () => {
     expect(isCompiledBinary("/usr/local/bin/myapp")).toBe(true);
+  });
+
+  it("returns true for bunny (not the bun runtime — prefix match would fail)", () => {
+    expect(isCompiledBinary("/usr/local/bin/bunny")).toBe(true);
+  });
+
+  it("returns true for node-helper (not the node runtime — prefix match would fail)", () => {
+    expect(isCompiledBinary("/usr/local/bin/node-helper")).toBe(true);
   });
 });
 
@@ -146,23 +154,12 @@ describe("uninstallBinary (confirmation prompt)", () => {
 
   it("throws UninstallCancelledError when user answers 'n'", async () => {
     const { ops } = makeFsOps(true);
-
-    // Override readConfirmLine via module — instead we test the CancelledError
-    // by passing a mock that simulates the user declining.
-    // We inline-test via the mock: replace readConfirmLine in the module.
-    const { readConfirmLine } = await import("./uninstall-command.ts");
-    const originalRead = readConfirmLine;
-
-    // Patch the exported function reference via module mock for this test scope.
-    // Since uninstallBinary imports readConfirmLine from its own module scope,
-    // we trigger cancellation by providing an execPath pointing to a compiled
-    // binary and then intercepting via a custom implementation.
-    // The simplest approach: test CancelledError directly.
-    const err = new UninstallCancelledError("Uninstall cancelled.");
-    expect(err.name).toBe("UninstallCancelledError");
-    expect(err.message).toBe("Uninstall cancelled.");
-    expect(err instanceof UninstallCancelledError).toBe(true);
-    expect(err instanceof Error).toBe(true);
+    await expect(
+      uninstallBinary(
+        { execPath: "/usr/local/bin/see-crets", readConfirm: async () => "n" },
+        ops,
+      ),
+    ).rejects.toThrow(UninstallCancelledError);
   });
 
   it("shows correct confirmation prompt lines", async () => {
@@ -176,6 +173,16 @@ describe("uninstallBinary (confirmation prompt)", () => {
     // With --yes, no prompt should be written to stderr.
     expect(stderrOutput).toHaveLength(0);
     expect(unlinkCalls).toHaveLength(1);
+  });
+
+  it("writes confirmation prompt to stderr when not using --yes", async () => {
+    const { ops } = makeFsOps(true);
+    await uninstallBinary(
+      { execPath: "/usr/local/bin/see-crets", readConfirm: async () => "y" },
+      ops,
+    );
+    expect(stderrOutput.some((l) => l.includes("About to remove:"))).toBe(true);
+    expect(stderrOutput.some((l) => l.includes("Vault data"))).toBe(true);
   });
 });
 

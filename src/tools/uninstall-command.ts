@@ -1,6 +1,7 @@
 import { unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,6 +16,11 @@ export interface UninstallOptions {
    * Injected in tests to avoid touching real paths.
    */
   execPath?: string;
+  /**
+   * Override the confirmation reader (injectable for tests).
+   * Defaults to `readConfirmLine` which reads a line from stdin.
+   */
+  readConfirm?: () => Promise<string>;
 }
 
 export interface UninstallResult {
@@ -46,8 +52,8 @@ const defaultFsOps: FsOps = { existsSync, unlink };
  */
 export function isCompiledBinary(execPath: string = process.execPath): boolean {
   const name = (execPath.split(/[/\\]/).pop() ?? execPath).toLowerCase();
-  // Bun ships as `bun` / `bun.exe`; Node as `node` / `node.exe`.
-  return !name.startsWith("bun") && !name.startsWith("node");
+  // Exact-match bun/node runtimes — prefix match would wrongly catch `bunny`, `node-helper`, etc.
+  return name !== "bun" && name !== "bun.exe" && name !== "node" && name !== "node.exe";
 }
 
 /**
@@ -97,7 +103,7 @@ export async function uninstallBinary(
   // Dev-mode guard — don't accidentally remove the Bun runtime.
   if (!isCompiledBinary(execPath)) {
     const note =
-      `Running in interpreter/dev mode — execPath is the Bun runtime, not an installed binary.\n` +
+      `Running in interpreter/dev mode — execPath is the Bun or Node runtime interpreter, not an installed binary.\n` +
       `Path that would be removed if installed: ${execPath}\n` +
       `Re-run from the installed binary location to perform a real uninstall.`;
     return { removed: execPath, devModeNote: note };
@@ -111,13 +117,33 @@ export async function uninstallBinary(
     process.stderr.write(`About to remove: ${execPath}\n`);
     process.stderr.write("Vault data (OS keychain) will NOT be affected.\n");
     process.stderr.write("Remove? [y/N] ");
-    const answer = await readConfirmLine();
+    const answer = await (options.readConfirm ?? readConfirmLine)();
     if (answer.toLowerCase() !== "y") {
       throw new UninstallCancelledError("Uninstall cancelled.");
     }
   }
 
-  await fs.unlink(execPath);
+  // Windows self-delete: a running .exe cannot unlink itself (file is locked).
+  // Catch the OS error and give the user manual instructions rather than crashing.
+  try {
+    await fs.unlink(execPath);
+  } catch (err) {
+    if (
+      process.platform === "win32" &&
+      err instanceof Error &&
+      ["EPERM", "EBUSY", "EACCES"].includes(
+        ((err as NodeJS.ErrnoException).code) ?? "",
+      )
+    ) {
+      process.stderr.write(
+        `Cannot delete the binary while it is running on Windows.\n`,
+      );
+      process.stderr.write(`Please delete manually: ${execPath}\n`);
+      process.stderr.write(`Or run: del "${execPath}"\n`);
+      return { removed: execPath };
+    }
+    throw err;
+  }
 
   return { removed: execPath };
 }
@@ -127,6 +153,49 @@ export class UninstallCancelledError extends Error {
     super(message);
     this.name = "UninstallCancelledError";
   }
+}
+
+// ---------------------------------------------------------------------------
+// PATH cleanup helper (best-effort — called by CLI with --yes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempts to remove the install directory from the user's PATH.
+ *
+ * - **Unix**: Scans common shell rc files and strips the matching `export PATH=…` line.
+ * - **Windows**: Returns the PowerShell command the user should run manually
+ *   (modifying the registry PATH programmatically is risky and requires elevation).
+ *
+ * Always returns a human-readable status string.
+ */
+async function tryRemoveFromPath(dir: string): Promise<string> {
+  if (process.platform === "win32") {
+    return (
+      `Run in PowerShell to remove from PATH:\n` +
+      `  [Environment]::SetEnvironmentVariable('PATH', ($env:PATH -replace [Regex]::Escape('${dir};'), ''), 'User')`
+    );
+  }
+
+  const rcFiles = [".bashrc", ".zshrc", ".profile", ".bash_profile"]
+    .map((f) => join(homedir(), f))
+    .filter((f) => existsSync(f));
+
+  // Escape the directory path for use inside a RegExp
+  const escaped = dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^export PATH=.*${escaped}.*\\n?`, "m");
+
+  let removed = false;
+  for (const rcFile of rcFiles) {
+    const content = readFileSync(rcFile, "utf8");
+    if (pattern.test(content)) {
+      writeFileSync(rcFile, content.replace(pattern, ""));
+      removed = true;
+    }
+  }
+
+  return removed
+    ? `Removed PATH entry from shell config(s).`
+    : `PATH entry not found in shell config files — remove manually if needed.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,9 +224,17 @@ export async function runUninstallCommand(): Promise<void> {
     const installDir = dirname(result.removed);
     process.stdout.write(`Removed: ${result.removed}\n`);
     process.stdout.write(`\nVault data (OS keychain) has NOT been touched.\n`);
-    process.stdout.write(
-      `To complete removal, remove '${installDir}' from your PATH if it was added for see-crets.\n`,
-    );
+
+    if (yes) {
+      // --yes: attempt PATH cleanup automatically, report what was done.
+      const pathResult = await tryRemoveFromPath(installDir);
+      process.stdout.write(`${pathResult}\n`);
+    } else {
+      // Interactive mode: user confirmed deletion — print manual instructions.
+      process.stdout.write(
+        `To complete removal, remove '${installDir}' from your PATH if it was added for see-crets.\n`,
+      );
+    }
   } catch (err) {
     if (err instanceof UninstallCancelledError) {
       process.stderr.write(`${err.message}\n`);
