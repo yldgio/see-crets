@@ -45,6 +45,7 @@ Human-only commands (destructive — NOT exposed to LLM tools):
   see-crets delete <key>     Delete a secret from the vault
   see-crets rotate <key>     Replace a secret value (masked input, no delete/re-add)
   see-crets purge            Remove ALL secrets for the current project namespace
+  see-crets uninstall        Remove the see-crets binary (vault data preserved)
 
 Options:
   --version, -v              Print version and exit
@@ -155,6 +156,14 @@ async function main() {
       const backend = await detectBackend();
       const result = await purgeSecrets(backend, project);
       console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+
+    case "uninstall": {
+      const { runUninstallCommand } = await import(
+        "./tools/uninstall-command.ts"
+      );
+      await runUninstallCommand();
       break;
     }
 
