@@ -61,6 +61,24 @@ describe("semverCompare", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isMusl — musl libc detection
+// ---------------------------------------------------------------------------
+
+describe("isMusl", () => {
+  it("returns true when ldd output contains 'musl'", () => {
+    expect(isMusl(() => "ldd (musl libc) 1.2.3")).toBe(true);
+  });
+
+  it("returns false when ldd output does not contain 'musl'", () => {
+    expect(isMusl(() => "ldd (Ubuntu GLIBC 2.35-0ubuntu3) 2.35")).toBe(false);
+  });
+
+  it("returns false when ldd runner throws (e.g. ldd not installed)", () => {
+    expect(isMusl(() => { throw new Error("ldd: command not found"); })).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getAssetName — platform/arch mapping
 // ---------------------------------------------------------------------------
 

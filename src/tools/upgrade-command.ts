@@ -38,11 +38,16 @@ export interface UpgradeOptions {
  * Detects via the presence of `/etc/alpine-release` (Alpine Linux) or
  * by running `ldd --version` and checking for "musl" in the output
  * (covers Void Linux, Chimera, and other non-Alpine musl distros).
+ *
+ * @param lddRunner - Injectable function returning ldd output; defaults to
+ *   spawning the real `ldd` process. Pass a stub in tests.
  */
-export function isMusl(): boolean {
+export function isMusl(lddRunner?: () => string): boolean {
   if (existsSync("/etc/alpine-release")) return true;
   try {
-    const ldd = execSync("ldd --version 2>&1", { encoding: "utf8", timeout: 2000 });
+    const ldd = lddRunner
+      ? lddRunner()
+      : execSync("ldd --version 2>&1", { encoding: "utf8", timeout: 2000 });
     return ldd.includes("musl");
   } catch {
     return false;
@@ -52,11 +57,14 @@ export function isMusl(): boolean {
 /**
  * Maps the current platform/arch to the release asset filename.
  * Throws if the platform is unsupported.
+ *
+ * @param musl - Override musl detection (optional). When omitted, `isMusl()`
+ *   is called only on Linux to avoid spawning `ldd` on macOS/Windows.
  */
 export function getAssetName(
   platform: string = process.platform,
   arch: string = process.arch,
-  musl: boolean = isMusl(),
+  musl?: boolean,
 ): string {
   if (platform === "darwin") {
     if (arch === "arm64") return "see-crets-macos-arm64";
@@ -65,7 +73,8 @@ export function getAssetName(
   }
 
   if (platform === "linux") {
-    const suffix = musl ? "-musl" : "";
+    const isMuslLinux = musl ?? isMusl();
+    const suffix = isMuslLinux ? "-musl" : "";
     if (arch === "x64") return `see-crets-linux-x64${suffix}`;
     if (arch === "arm64") return `see-crets-linux-arm64${suffix}`;
     throw new Error(`Unsupported architecture on Linux: ${arch}`);
