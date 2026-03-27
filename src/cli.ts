@@ -46,6 +46,7 @@ Human-only commands (destructive — NOT exposed to LLM tools):
   see-crets rotate <key>     Replace a secret value (masked input, no delete/re-add)
   see-crets purge            Remove ALL secrets for the current project namespace
   see-crets uninstall        Remove the see-crets binary (vault data preserved)
+  see-crets upgrade          Self-update to the latest release from GitHub
 
 Options:
   --version, -v              Print version and exit
@@ -164,6 +165,14 @@ async function main() {
         "./tools/uninstall-command.ts"
       );
       await runUninstallCommand();
+      break;
+    }
+
+    case "upgrade": {
+      const { runUpgradeCommand } = await import(
+        "./tools/upgrade-command.ts"
+      );
+      await runUpgradeCommand();
       break;
     }
 
