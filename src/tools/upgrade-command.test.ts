@@ -43,12 +43,12 @@ describe("semverCompare", () => {
 // ---------------------------------------------------------------------------
 
 describe("getAssetName", () => {
-  it("returns darwin-arm64 asset", () => {
-    expect(getAssetName("darwin", "arm64", false)).toBe("see-crets-darwin-arm64");
+  it("returns macos-arm64 asset", () => {
+    expect(getAssetName("darwin", "arm64", false)).toBe("see-crets-macos-arm64");
   });
 
-  it("returns darwin-x64 asset", () => {
-    expect(getAssetName("darwin", "x64", false)).toBe("see-crets-darwin-x64");
+  it("returns macos-x64 asset", () => {
+    expect(getAssetName("darwin", "x64", false)).toBe("see-crets-macos-x64");
   });
 
   it("returns linux-x64 asset", () => {
@@ -102,7 +102,7 @@ describe("getAssetName", () => {
 
 describe("parseChecksums", () => {
   const CHECKSUMS = `
-abc123def456abc123def456abc123def456abc123def456abc123def456abc12345  see-crets-darwin-arm64
+abc123def456abc123def456abc123def456abc123def456abc123def456abc12345  see-crets-macos-arm64
 deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef  see-crets-linux-x64
 aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd  see-crets-windows-x64.exe
 `.trim();

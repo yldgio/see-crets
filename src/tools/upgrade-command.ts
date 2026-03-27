@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { rename, writeFile, chmod } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execSync } from "child_process";
 import { join, dirname } from "node:path";
 import { isCompiledBinary } from "./uninstall-command.ts";
 
@@ -33,11 +34,19 @@ export interface UpgradeOptions {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns `true` when running on Alpine Linux (musl libc).
- * Detects via the presence of `/etc/alpine-release`.
+ * Returns `true` when running on a musl libc system.
+ * Detects via the presence of `/etc/alpine-release` (Alpine Linux) or
+ * by running `ldd --version` and checking for "musl" in the output
+ * (covers Void Linux, Chimera, and other non-Alpine musl distros).
  */
 export function isMusl(): boolean {
-  return existsSync("/etc/alpine-release");
+  if (existsSync("/etc/alpine-release")) return true;
+  try {
+    const ldd = execSync("ldd --version 2>&1", { encoding: "utf8", timeout: 2000 });
+    return ldd.includes("musl");
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -50,8 +59,8 @@ export function getAssetName(
   musl: boolean = isMusl(),
 ): string {
   if (platform === "darwin") {
-    if (arch === "arm64") return "see-crets-darwin-arm64";
-    if (arch === "x64") return "see-crets-darwin-x64";
+    if (arch === "arm64") return "see-crets-macos-arm64";
+    if (arch === "x64") return "see-crets-macos-x64";
     throw new Error(`Unsupported architecture on macOS: ${arch}`);
   }
 

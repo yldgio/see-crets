@@ -50,6 +50,14 @@ warn()  { printf '\033[1;33m[see-crets] WARNING:\033[0m %s\n' "$*" >&2; }
 error() { printf '\033[1;31m[see-crets] ERROR:\033[0m %s\n' "$*" >&2; }
 die()   { error "$*"; exit 1; }
 
+# ── VERSION validation ────────────────────────────────────────────────────────
+# Reject path traversal attempts (e.g. "1.2.3/../../other-org/other-repo/v9.9.9")
+if [ -n "${VERSION}" ]; then
+  case "${VERSION}" in
+    */* | *\\* | *..*) die "Invalid VERSION: path traversal characters not allowed." ;;
+  esac
+fi
+
 # ── Platform detection ────────────────────────────────────────────────────────
 detect_platform() {
   local os arch musl
@@ -171,8 +179,7 @@ verify_sha256() {
   expected="$(grep "[[:space:]]${asset}$" "${checksums_file}" | awk '{print $1}')"
 
   if [ -z "${expected}" ]; then
-    warn "No checksum entry for '${asset}' in checksums.txt — skipping verification."
-    return 0
+    die "No checksum entry for '${asset}' in checksums.txt — cannot verify integrity. Aborting."
   fi
 
   local actual
@@ -299,7 +306,7 @@ main() {
     if fetch "${checksums_url}" "${TMP_DIR}/checksums.txt" 2>/dev/null; then
       verify_sha256 "${TMP_DIR}/${ASSET_NAME}" "${TMP_DIR}/checksums.txt" "${ASSET_NAME}"
     else
-      warn "Could not download checksums.txt — skipping SHA-256 verification."
+      die "Could not download checksums.txt — cannot verify integrity. Aborting."
     fi
   else
     warn "No prebuilt binary found for ${ASSET_NAME} at v${VERSION}."
