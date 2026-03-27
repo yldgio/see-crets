@@ -62,9 +62,17 @@ jobs:
         working-directory: dist
         run: sha256sum see-crets-* > checksums.txt
 
+      - name: Generate release notes
+        id: cliff
+        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4
+        with:
+          config: cliff.toml
+          args: --current --strip header
+
       - name: Upload release assets
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
+          body: ${{ steps.cliff.outputs.content }}
           files: |
             dist/see-crets-macos-arm64
             dist/see-crets-macos-x64

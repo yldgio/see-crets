@@ -127,6 +127,36 @@ security(hook): prevent secret values from leaking into error messages
 
 ---
 
+## Version Bump Workflow
+
+When cutting a new release, follow this canonical sequence. It keeps the commit, tag, and
+CHANGELOG in sync, and ensures the GitHub Release description is auto-generated from
+conventional commits by `orhun/git-cliff-action` in CI.
+
+```sh
+# 1. Bump the version in package.json, create a commit and a lightweight tag
+bun version patch          # or: minor | major
+
+# 2. Generate the CHANGELOG section for the new tag and prepend it to CHANGELOG.md
+bunx git-cliff --config cliff.toml --unreleased --prepend CHANGELOG.md
+
+# 3. Amend the version-bump commit to include the CHANGELOG update
+git add CHANGELOG.md && git commit --amend --no-edit
+
+# 4. Re-tag the amended commit (the previous tag pointed at the pre-amend commit)
+git tag -d vX.Y.Z
+git tag vX.Y.Z
+
+# 5. Push — the tag push triggers release.yml which publishes binaries + release notes
+git push && git push --tags
+```
+
+> **Note**: `bun version` sets the version in `package.json` but does **not** run `npm version`
+> lifecycle hooks; the tag created is a lightweight tag. Amending the commit after `bun version`
+> requires re-tagging because the commit SHA changes.
+
+---
+
 ## Pull Request Guidelines
 
 - **One PR per concern.** Don't bundle unrelated changes.
