@@ -1,6 +1,6 @@
 import { unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { dirname } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +45,7 @@ const defaultFsOps: FsOps = { existsSync, unlink };
  * i.e. in dev mode via `bun run src/cli.ts`.
  */
 export function isCompiledBinary(execPath: string = process.execPath): boolean {
-  const name = basename(execPath).toLowerCase();
+  const name = (execPath.split(/[/\\]/).pop() ?? execPath).toLowerCase();
   // Bun ships as `bun` / `bun.exe`; Node as `node` / `node.exe`.
   return !name.startsWith("bun") && !name.startsWith("node");
 }
