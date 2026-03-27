@@ -41,3 +41,17 @@ jobs:
 
       - name: Build binary
         run: bun run build
+
+  install-sh:
+    name: install.sh (shellcheck)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate install.sh with shellcheck
+        # shellcheck is pre-installed on ubuntu-latest GitHub-hosted runners
+        run: shellcheck install.sh
+
+      - name: Verify shebang
+        run: head -1 install.sh | grep -q '^#!/usr/bin/env bash' && echo "Shebang OK"
