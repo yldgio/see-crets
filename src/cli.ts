@@ -30,6 +30,7 @@ import {
   rotateSecret,
 } from "./lifecycle.ts";
 import { getProjectName, isInGitRepo } from "./utils/git.ts";
+import pkg from "../package.json";
 
 function usage(): never {
   console.error(`
@@ -46,6 +47,7 @@ Human-only commands (destructive — NOT exposed to LLM tools):
   see-crets purge            Remove ALL secrets for the current project namespace
 
 Options:
+  --version, -v              Print version and exit
   --project <name>           Override the project namespace (default: git root basename)
 `);
   process.exit(1);
@@ -53,6 +55,11 @@ Options:
 
 const args = process.argv.slice(2);
 const cmd = args[0];
+
+if (cmd === "--version" || cmd === "-v") {
+  console.log(`see-crets ${pkg.version}`);
+  process.exit(0);
+}
 
 // Parse --project flag — reject duplicate occurrences to avoid positional arg corruption.
 const projectIndices = args.reduce<number[]>(

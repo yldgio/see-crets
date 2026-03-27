@@ -7,7 +7,7 @@ description: End-to-end implementation workflow. Use when user wants to implemen
 End-to-end implementation workflow from exploration to commit.
 
 ## Input: User request to implement a feature, fix a bug, or make changes to the codebase.
-user requests implementation of a feature, bug fix, or code change pointing to a specific github issue, user story, or requirement file.
+user requests implementation of a feature, bug fix, or code change pointing to a specific GitHub issue, user story, or requirement file.
 
 ## Workflow
 1. Explore requirements and codebase using subagent calls as needed to understand the problem and current state.
@@ -17,7 +17,7 @@ user requests implementation of a feature, bug fix, or code change pointing to a
 4. Write tests in Test-Driven Development (TDD) style if applicable and not trivial. Otherwise, write code directly but ensure to cover edge cases.
 5. Implement code to pass tests
 6. Continue iterating on implementation and tests until all requirements are met and tests pass
-6a. stage changes
+6a. Stage changes.
 7. Run parallel subagents to validate implementation against acceptance criteria, adverse scenarios, code quality (readability, maintainability, security), and performance benchmarks as applicable. 
 8. Iterate on code and tests based on feedback until validation is successful.
 9. Commit changes with conventional commits
