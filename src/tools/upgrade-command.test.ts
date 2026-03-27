@@ -36,6 +36,28 @@ describe("semverCompare", () => {
   it("returns -1 when a < b (minor)", () => {
     expect(semverCompare("1.1.9", "1.2.0")).toBe(-1);
   });
+
+  it("returns -1 for pre-release vs release (same version number)", () => {
+    expect(semverCompare("0.1.0-beta.1", "0.1.0")).toBe(-1);
+  });
+
+  it("returns 1 for release vs pre-release (same version number)", () => {
+    expect(semverCompare("0.1.0", "0.1.0-beta.1")).toBe(1);
+  });
+
+  it("returns 0 for equal pre-release versions", () => {
+    expect(semverCompare("0.1.0-beta.1", "0.1.0-beta.1")).toBe(0);
+  });
+
+  it("ignores build metadata (+ suffix) when detecting pre-release", () => {
+    // "1.0.0+build-1" has build metadata containing a hyphen — not a pre-release
+    expect(semverCompare("1.0.0+build-1", "1.0.0")).toBe(0);
+  });
+
+  // Note: relative ordering of two distinct pre-release identifiers
+  // (e.g. "1.0.0-beta.2" vs "1.0.0-beta.1") is intentionally not implemented.
+  // GitHub's releases/latest API never returns pre-release versions, so the
+  // upgrade path only ever compares stable-vs-stable or stable-vs-pre-release.
 });
 
 // ---------------------------------------------------------------------------

@@ -240,27 +240,36 @@ export async function downloadAndReplaceBinary(
 // ---------------------------------------------------------------------------
 
 /**
- * Compares two semver strings (major.minor.patch).
+ * Compares two semver strings (major.minor.patch[-prerelease]).
  * Returns  1 if a > b
  *          0 if a === b
  *         -1 if a < b
- * Non-numeric or malformed parts are treated as 0.
+ *
+ * Pre-release suffixes are handled per the semver spec: a pre-release version
+ * is always less than the corresponding release (`1.0.0-beta.1 < 1.0.0`).
+ * Missing or non-numeric parts are treated as 0.
  */
 export function semverCompare(a: string, b: string): 1 | 0 | -1 {
-  const parse = (v: string) =>
-    v.split(".").map((n) => parseInt(n, 10) || 0);
+  // Strip pre-release suffix before numeric comparison;
+  // strip build metadata first so "1.0.0+build-1" isn't misclassified as pre-release
+  const stripBuild = (v: string) => v.replace(/\+.*$/, "");
+  const stripPre = (v: string) => stripBuild(v).replace(/-.*$/, "");
+  const aHasPre = stripBuild(a).includes("-");
+  const bHasPre = stripBuild(b).includes("-");
 
-  const [aMajor, aMinor, aPatch] = parse(a);
-  const [bMajor, bMinor, bPatch] = parse(b);
+  const aParts = stripPre(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const bParts = stripPre(b).split(".").map((n) => parseInt(n, 10) || 0);
 
-  for (const [av, bv] of [
-    [aMajor, bMajor],
-    [aMinor, bMinor],
-    [aPatch, bPatch],
-  ] as [number, number][]) {
+  for (let i = 0; i < 3; i++) {
+    const av = aParts[i] ?? 0;
+    const bv = bParts[i] ?? 0;
     if (av > bv) return 1;
     if (av < bv) return -1;
   }
+
+  // Numeric parts are equal — pre-release < release per semver spec
+  if (aHasPre && !bHasPre) return -1;
+  if (!aHasPre && bHasPre) return 1;
   return 0;
 }
 
