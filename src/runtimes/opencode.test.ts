@@ -149,7 +149,10 @@ describe("SecretsPlugin — ask_secret_set security invariant", () => {
       expect(raw).not.toContain("SUPER_SECRET_VALUE")
       const parsed = JSON.parse(raw)
       expect(parsed).not.toHaveProperty("value")
-      expect(parsed.stored).toBe(true)
+      // Bug #51 fix: stored:false — existing key was NOT overwritten
+      expect(parsed.stored).toBe(false)
+      expect(parsed.instructions).toContain("inv-project/existing-key")
+      expect(parsed.instructions).toContain("see-crets set")
     } finally {
       (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY
     }
