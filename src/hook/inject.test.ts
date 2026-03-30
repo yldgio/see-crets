@@ -274,6 +274,43 @@ describe("injectSecrets", () => {
     expect(result.keys).toHaveLength(1); // deduplicated
   });
 
+  it("auto-inject: keys from an unrelated project namespace are NOT injected when projectName is set", async () => {
+    // Vault has keys from three namespaces.
+    // Only projectA/ and global/ must be visible when projectName is "projectA".
+    const store = new Map([
+      ["projectA/github-token",  "ghp_projectA_value_abc"],
+      ["projectB/github-token",  "ghp_projectB_value_xyz"],  // must NOT be injected
+      ["global/openai-api-key",  "sk_global_openai_111"],
+    ]);
+    const backend = createMockBackend(store);
+
+    const { injectSecrets } = await import("./inject.ts");
+    const result = await injectSecrets("run-agent", backend, { projectName: "projectA" });
+
+    // projectA key must be injected
+    expect(result.env["GITHUB_TOKEN"]).toBe("ghp_projectA_value_abc");
+    // global key must be injected
+    expect(result.env["OPENAI_API_KEY"]).toBe("sk_global_openai_111");
+    // projectB key must NOT appear anywhere in the injected env
+    const envValues = Object.values(result.env);
+    expect(envValues).not.toContain("ghp_projectB_value_xyz");
+    // projectB key must not appear in the reported key list either
+    expect(result.keys).not.toContain("projectB/github-token");
+  });
+
+  it("auto-inject: without projectName, falls back to listing all keys (legacy behaviour)", async () => {
+    // Verify backward compatibility: when no projectName is given, list('') is used
+    // and keys from any namespace are still injectable.
+    const store = new Map([
+      ["any-project/github-token", "ghp_legacy_fallback_999"],
+    ]);
+    const backend = createMockBackend(store);
+
+    const { injectSecrets } = await import("./inject.ts");
+    const result = await injectSecrets("run-agent", backend);  // no projectName
+
+    expect(result.env["GITHUB_TOKEN"]).toBe("ghp_legacy_fallback_999");
+  });
   it("throws on unsafe env-var name from project map during auto-inject", async () => {
     const store = new Map([["my-app/my-key", "secret"]]);
     const backend = createMockBackend(store);

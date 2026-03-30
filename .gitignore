@@ -39,6 +39,9 @@ PowerShellEditorServices.json
 see-crets-design.md
 skills-lock.json
 
+# --- Git worktrees (parallel agent isolation) ---
+.worktrees/
+
 # --- Node / TypeScript ---
 node_modules/
 dist/

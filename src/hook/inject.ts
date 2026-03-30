@@ -43,6 +43,16 @@ export interface InjectOptions {
    * If omitted, only the built-in map is used.
    */
   projectDir?: string;
+  /**
+   * The vault namespace prefix for the current project (e.g. `"my-app"`).
+   *
+   * When provided, auto-inject only considers keys from `${projectName}/` and
+   * `global/` — preventing secrets from unrelated projects from leaking into
+   * this agent session.
+   *
+   * When omitted, all vault keys are candidates (legacy behaviour).
+   */
+  projectName?: string;
 }
 
 /**
@@ -76,7 +86,7 @@ export async function injectSecrets(
   backend?: VaultBackend,
   options: InjectOptions = {},
 ): Promise<InjectResult> {
-  const { autoInject = true, projectDir } = options;
+  const { autoInject = true, projectDir, projectName } = options;
   const placeholders = [...command.matchAll(PLACEHOLDER_RE)];
 
   const resolvedBackend = backend ?? (await detectBackend());
@@ -109,7 +119,20 @@ export async function injectSecrets(
   // --- Auto-inject via env-var map ---
   if (autoInject) {
     const envMap = resolveEnvMap(projectDir);
-    const allKeys = await resolvedBackend.list("");
+
+    // Only fetch keys from the current project namespace and the global namespace.
+    // This prevents secrets from unrelated projects from being auto-injected.
+    // When projectName is not provided, fall back to listing all keys (legacy behaviour).
+    let allKeys: string[];
+    if (projectName) {
+      const [projectKeys, globalKeys] = await Promise.all([
+        resolvedBackend.list(`${projectName}/`),
+        resolvedBackend.list("global/"),
+      ]);
+      allKeys = [...projectKeys, ...globalKeys];
+    } else {
+      allKeys = await resolvedBackend.list("");
+    }
 
     // Deterministic precedence: project-namespaced keys win over global/ keys.
     // Within each group, sort alphabetically so the result is stable regardless
