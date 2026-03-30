@@ -1,6 +1,8 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 
+const SAFE_VARNAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /**
  * Built-in map from well-known vault key-name suffixes to standard env var names.
  *
@@ -83,6 +85,11 @@ export function loadProjectConfig(dir: string): Record<string, string> {
       if (typeof v !== "string") {
         throw new Error(
           `.see-crets.json at "${configPath}": map["${k}"] must be a string, got ${typeof v}`,
+        );
+      }
+      if (!SAFE_VARNAME.test(v)) {
+        throw new Error(
+          `.see-crets.json at "${configPath}": map["${k}"] has unsafe env-var name "${v}"`,
         );
       }
     }
