@@ -1,9 +1,12 @@
 import { describe, it, expect, spyOn, beforeEach, afterEach } from "bun:test";
 import {
   isCompiledBinary,
+  readConfirmLine,
+  stripDirFromExportPathLine,
   uninstallBinary,
   UninstallCancelledError,
   type FsOps,
+  type StdinLike,
 } from "./uninstall-command.ts";
 
 // ---------------------------------------------------------------------------
@@ -19,6 +22,47 @@ function makeFsOps(exists = true): { ops: FsOps; unlinkCalls: string[] } {
     },
   };
   return { ops, unlinkCalls };
+}
+
+// ---------------------------------------------------------------------------
+// Minimal stdin mock for testing readConfirmLine (issue #45)
+// ---------------------------------------------------------------------------
+
+function makeStdinMock(): StdinLike & {
+  push(data: string): void;
+  end(): void;
+  close(): void;
+} {
+  const listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
+
+  const mock = {
+    setEncoding(_enc: BufferEncoding) {},
+    resume() {},
+    pause() {},
+    on(event: string, fn: (...args: unknown[]) => void) {
+      (listeners[event] ??= []).push(fn);
+    },
+    once(event: string, fn: (...args: unknown[]) => void) {
+      const wrapped = (...args: unknown[]) => {
+        mock.removeListener(event, wrapped);
+        fn(...args);
+      };
+      (listeners[event] ??= []).push(wrapped);
+    },
+    removeListener(event: string, fn: (...args: unknown[]) => void) {
+      listeners[event] = (listeners[event] ?? []).filter((f) => f !== fn);
+    },
+    push(data: string) {
+      (listeners["data"] ?? []).forEach((f) => f(data));
+    },
+    end() {
+      (listeners["end"] ?? []).slice().forEach((f) => f());
+    },
+    close() {
+      (listeners["close"] ?? []).slice().forEach((f) => f());
+    },
+  };
+  return mock;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +104,116 @@ describe("isCompiledBinary", () => {
 
   it("returns true for node-helper (not the node runtime — prefix match would fail)", () => {
     expect(isCompiledBinary("/usr/local/bin/node-helper")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readConfirmLine — issue #45: resolves on stdin EOF without newline
+// ---------------------------------------------------------------------------
+
+describe("readConfirmLine", () => {
+  it("resolves with trimmed text when newline arrives", async () => {
+    const stdin = makeStdinMock();
+    const promise = readConfirmLine(stdin);
+    stdin.push("y\n");
+    expect(await promise).toBe("y");
+  });
+
+  it("resolves with trimmed text on stdin 'end' without newline (issue #45)", async () => {
+    const stdin = makeStdinMock();
+    const promise = readConfirmLine(stdin);
+    stdin.push("y"); // no trailing newline
+    stdin.end();
+    expect(await promise).toBe("y");
+  });
+
+  it("resolves with trimmed text on stdin 'close' without newline (issue #45)", async () => {
+    const stdin = makeStdinMock();
+    const promise = readConfirmLine(stdin);
+    stdin.push("yes"); // no trailing newline
+    stdin.close();
+    expect(await promise).toBe("yes");
+  });
+
+  it("resolves with empty string when stdin closes with no data", async () => {
+    const stdin = makeStdinMock();
+    const promise = readConfirmLine(stdin);
+    stdin.end();
+    expect(await promise).toBe("");
+  });
+
+  it("does not double-resolve when both end and close fire", async () => {
+    const stdin = makeStdinMock();
+    const promise = readConfirmLine(stdin);
+    stdin.push("n");
+    stdin.end();
+    stdin.close(); // second event — must not throw or re-resolve
+    expect(await promise).toBe("n");
+  });
+
+  it("takes only the first line when data contains multiple newlines", async () => {
+    const stdin = makeStdinMock();
+    const promise = readConfirmLine(stdin);
+    stdin.push("y\nextra\nlines");
+    expect(await promise).toBe("y");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stripDirFromExportPathLine — issue #47: segment removal
+// ---------------------------------------------------------------------------
+
+describe("stripDirFromExportPathLine", () => {
+  const DIR = "/home/user/.local/bin";
+
+  // ---- Lines that should be left unchanged ----
+  it("returns the line unchanged when it does not contain the dir", () => {
+    const line = 'export PATH="/other/bin:$PATH"';
+    expect(stripDirFromExportPathLine(line, DIR)).toBe(line);
+  });
+
+  it("returns the line unchanged when it is not an export PATH= line", () => {
+    const line = `# export PATH="${DIR}"`;
+    expect(stripDirFromExportPathLine(line, DIR)).toBe(line);
+  });
+
+  // ---- Single-entry: whole line must be removed ----
+  it("returns null when the dir is the sole entry (quoted)", () => {
+    expect(
+      stripDirFromExportPathLine(`export PATH="${DIR}"`, DIR),
+    ).toBeNull();
+  });
+
+  it("returns null when the dir is the sole entry (unquoted)", () => {
+    expect(stripDirFromExportPathLine(`export PATH=${DIR}`, DIR)).toBeNull();
+  });
+
+  // ---- Multi-entry: only the segment is removed ----
+  it("removes dir from start of a quoted multi-entry PATH", () => {
+    const line = `export PATH="${DIR}:$PATH"`;
+    expect(stripDirFromExportPathLine(line, DIR)).toBe('export PATH="$PATH"');
+  });
+
+  it("removes dir from end of a quoted multi-entry PATH", () => {
+    const line = `export PATH="$PATH:${DIR}"`;
+    expect(stripDirFromExportPathLine(line, DIR)).toBe('export PATH="$PATH"');
+  });
+
+  it("removes dir from the middle of a quoted multi-entry PATH", () => {
+    const line = `export PATH="/first:${DIR}:/last"`;
+    expect(stripDirFromExportPathLine(line, DIR)).toBe(
+      'export PATH="/first:/last"',
+    );
+  });
+
+  it("removes dir from start of an unquoted multi-entry PATH", () => {
+    const line = `export PATH=${DIR}:$PATH`;
+    expect(stripDirFromExportPathLine(line, DIR)).toBe("export PATH=$PATH");
+  });
+
+  it("removes dir from end of an unquoted multi-entry PATH", () => {
+    const line = `export PATH=$PATH:${DIR}`;
+    expect(stripDirFromExportPathLine(line, DIR)).toBe("export PATH=$PATH");
   });
 });
 

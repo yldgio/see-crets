@@ -56,26 +56,109 @@ export function isCompiledBinary(execPath: string = process.execPath): boolean {
   return name !== "bun" && name !== "bun.exe" && name !== "node" && name !== "node.exe";
 }
 
+/** Minimal interface for the stdin stream — allows injection in tests. */
+export interface StdinLike {
+  setEncoding(encoding: BufferEncoding): void;
+  resume(): void;
+  pause(): void;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  once(event: string, listener: (...args: unknown[]) => void): void;
+  removeListener(event: string, listener: (...args: unknown[]) => void): void;
+}
+
 /**
  * Reads a single line from stdin for the confirmation prompt.
  * Returns the trimmed input string.
+ *
+ * Handles two resolution paths:
+ *  1. A newline character arrives in the data stream (normal interactive use).
+ *  2. stdin closes / ends without a newline (e.g. `echo -n "y" | see-crets uninstall`).
+ *     In that case the accumulated buffer is resolved as-is so the process
+ *     does not hang indefinitely (fix for issue #45).
+ *
+ * @param stdin - Defaults to `process.stdin`; inject a mock in tests.
  */
-export async function readConfirmLine(): Promise<string> {
+export async function readConfirmLine(
+  stdin: StdinLike = process.stdin,
+): Promise<string> {
   return new Promise((resolve) => {
     let buf = "";
-    const onData = (chunk: string) => {
-      buf += chunk;
+    let resolved = false;
+
+    const cleanup = () => {
+      stdin.removeListener("data", onData);
+      stdin.removeListener("end", onEnd);
+      stdin.removeListener("close", onEnd);
+      stdin.pause();
+    };
+
+    const onData = (chunk: unknown) => {
+      buf += chunk as string;
       const nlIdx = buf.indexOf("\n");
-      if (nlIdx !== -1) {
-        process.stdin.removeListener("data", onData);
-        process.stdin.pause();
+      if (nlIdx !== -1 && !resolved) {
+        resolved = true;
+        cleanup();
         resolve(buf.slice(0, nlIdx).trim());
       }
     };
-    process.stdin.setEncoding("utf8");
-    process.stdin.resume();
-    process.stdin.on("data", onData);
+
+    const onEnd = () => {
+      if (!resolved) {
+        resolved = true;
+        cleanup();
+        resolve(buf.trim());
+      }
+    };
+
+    stdin.setEncoding("utf8");
+    stdin.resume();
+    stdin.on("data", onData);
+    stdin.once("end", onEnd);
+    stdin.once("close", onEnd);
   });
+}
+
+// ---------------------------------------------------------------------------
+// PATH cleanup helper — pure logic (exported for testing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Strips `dir` from a single `export PATH=...` shell line.
+ *
+ * Returns the modified line, or `null` if the line should be deleted entirely
+ * (i.e. `dir` was the only meaningful entry and nothing remains).
+ * Returns the line unchanged if it is not an `export PATH=` line or
+ * does not contain `dir`.
+ *
+ * Fix for issue #47: previously the whole line was deleted even when
+ * other PATH entries (e.g. `:$PATH`) were present on the same line.
+ */
+export function stripDirFromExportPathLine(
+  line: string,
+  dir: string,
+): string | null {
+  if (!line.includes(dir) || !/^export PATH=/.test(line)) return line;
+
+  const prefix = "export PATH=";
+  let rest = line.slice(prefix.length);
+
+  // Detect and strip optional surrounding quotes (matching pair only).
+  let quote = "";
+  if (
+    (rest.startsWith('"') && rest.endsWith('"')) ||
+    (rest.startsWith("'") && rest.endsWith("'"))
+  ) {
+    quote = rest[0];
+    rest = rest.slice(1, -1);
+  }
+
+  // Split the PATH value on colons, remove our dir, drop empty segments.
+  const parts = rest.split(":").filter((p) => p !== dir && p !== "");
+
+  // Nothing left — delete the whole line.
+  if (parts.length === 0) return null;
+
+  return `${prefix}${quote}${parts.join(":")}${quote}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -180,15 +263,23 @@ async function tryRemoveFromPath(dir: string): Promise<string> {
     .map((f) => join(homedir(), f))
     .filter((f) => existsSync(f));
 
-  // Escape the directory path for use inside a RegExp
-  const escaped = dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`^export PATH=.*${escaped}.*\\n?`, "m");
-
   let removed = false;
   for (const rcFile of rcFiles) {
     const content = readFileSync(rcFile, "utf8");
-    if (pattern.test(content)) {
-      writeFileSync(rcFile, content.replace(pattern, ""));
+    if (!content.includes(dir)) continue;
+
+    const lines = content.split("\n");
+    let changed = false;
+    const newLines = lines
+      .map((line) => {
+        const result = stripDirFromExportPathLine(line, dir);
+        if (result !== line) changed = true;
+        return result;
+      })
+      .filter((l): l is string => l !== null);
+
+    if (changed) {
+      writeFileSync(rcFile, newLines.join("\n"));
       removed = true;
     }
   }
