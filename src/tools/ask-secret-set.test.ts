@@ -52,7 +52,7 @@ describe("askSecretSet — security invariant", () => {
     }
   });
 
-  it("non-interactive stored=true (key exists): result never contains value", async () => {
+  it("non-interactive key-exists: stored=false with instructions, result never contains value", async () => {
     const originalIsTTY = process.stdin.isTTY;
     (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = false;
 
@@ -71,8 +71,13 @@ describe("askSecretSet — security invariant", () => {
       const result = await askSecretSet("existing-key", "inv-project");
 
       expect(result).not.toHaveProperty("value");
-      expect(result.stored).toBe(true);
+      // Bug #51 fix: stored:false when key exists — nothing new was written
+      expect(result.stored).toBe(false);
       expect(result.key).toBe("inv-project/existing-key");
+      if (!result.stored) {
+        expect(result.instructions).toContain("inv-project/existing-key");
+        expect(result.instructions).toContain("see-crets set");
+      }
     } finally {
       (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
     }
@@ -157,7 +162,7 @@ describe("askSecretSet — additional integration tests", () => {
     }
   });
 
-  it("non-interactive mode with key already in vault: stored=true without value", async () => {
+  it("non-interactive mode with key already in vault: stored=false with instructions (bug #51)", async () => {
     const originalIsTTY = process.stdin.isTTY;
     (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = false;
 
@@ -177,9 +182,44 @@ describe("askSecretSet — additional integration tests", () => {
       const { askSecretSet } = await import("./ask-secret-set.ts");
       const result = await askSecretSet("existing-key", "vault-project");
 
-      expect(result.stored).toBe(true);
+      // Bug #51 fix: stored:false because no new value was written
+      expect(result.stored).toBe(false);
       expect(result.key).toBe("vault-project/existing-key");
       expect(result).not.toHaveProperty("value");
+      if (!result.stored) {
+        expect(result.instructions).toContain("vault-project/existing-key");
+        expect(result.instructions).toContain("see-crets set");
+        expect(result.instructions).toContain("already exists");
+      }
+    } finally {
+      (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
+    }
+  });
+
+  it("non-interactive mode — key exists: instructions guide user to update the key", async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = false;
+
+    const vault = createMockVault(["rotation-project/api-key"]);
+    mock.module("../vault/detect.ts", () => ({
+      detectBackend: async () => vault,
+      detectResult: async () => ({ available: true, backend: "MockVault" }),
+    }));
+    mock.module("../utils/git.ts", () => ({
+      isInGitRepo: () => false,
+      getProjectName: () => "global",
+    }));
+
+    try {
+      const { askSecretSet } = await import("./ask-secret-set.ts");
+      const result = await askSecretSet("api-key", "rotation-project");
+
+      expect(result.stored).toBe(false);
+      if (!result.stored) {
+        expect(result.instructions).toContain("rotation-project/api-key");
+        expect(result.instructions).toContain("see-crets set rotation-project/api-key");
+        expect(result.instructions).toContain("already exists");
+      }
     } finally {
       (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
     }
