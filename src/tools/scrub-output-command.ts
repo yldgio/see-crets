@@ -1,13 +1,17 @@
 import { detectBackend } from "../vault/detect.ts";
 import { scrub } from "../hook/scrub.ts";
-import { getProjectName, isInGitRepo } from "../utils/git.ts";
 import type { VaultBackend } from "../vault/types.ts";
 
 /**
  * Scrubs every vault secret value from `input`.
  *
- * Retrieves all values stored for the current project namespace and the
- * `global/` namespace, then delegates to `scrub()` from the hook library.
+ * Retrieves **all** values across every namespace by calling `backend.list("")`,
+ * mirroring what `injectSecrets()` does in `src/hook/inject.ts`. This is the
+ * only safe choice: `injectSecrets()` fetches all namespaces when auto-injecting,
+ * so a secret from any namespace (not just the current project or `global/`) can
+ * end up in subprocess output. Limiting scrubbing to a subset of namespaces
+ * creates a coverage gap where injected secrets survive unscrubbed into LLM
+ * context.
  *
  * **Throws** if the vault is unavailable or any vault operation fails.
  * Previously, vault errors were silently swallowed and the raw (potentially
@@ -28,13 +32,10 @@ export async function scrubOutput(
   // policy. The old catch { return input } was fail-open: it silently returned
   // unscrubbed output (potentially containing live secrets) to the LLM.
   const resolvedBackend = backend ?? (await detectBackend());
-  const project = isInGitRepo() ? getProjectName() : "global";
-  const prefixes =
-    project === "global" ? ["global/"] : [`${project}/`, "global/"];
-  const keysets = await Promise.all(
-    prefixes.map((p) => resolvedBackend.list(p)),
-  );
-  const allKeys = [...new Set(keysets.flat())];
+  // Fetch ALL keys across every namespace so coverage matches injectSecrets(),
+  // which also calls list(""). Using a narrower prefix set (e.g. only project/
+  // and global/) would miss secrets injected from other namespaces.
+  const allKeys = await resolvedBackend.list("");
   const maybeValues = await Promise.all(
     allKeys.map((k) => resolvedBackend.get(k)),
   );
