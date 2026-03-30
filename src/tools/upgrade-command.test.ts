@@ -5,6 +5,7 @@ import {
   parseChecksums,
   semverCompare,
   runUpgrade,
+  fetchWithTimeout,
   type UpgradeOptions,
 } from "./upgrade-command.ts";
 
@@ -355,5 +356,60 @@ describe("runUpgrade — dev mode", () => {
     await runUpgrade(opts);
 
     expect(called).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchWithTimeout -- timeout behaviour
+// ---------------------------------------------------------------------------
+
+describe("fetchWithTimeout", () => {
+  afterEach(() => {
+    (globalThis.fetch as unknown as { mockRestore?: () => void }).mockRestore?.();
+  });
+
+  it("passes AbortSignal to the underlying fetch call", async () => {
+    const spy = spyOn(globalThis, `fetch`).mockImplementation(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(init?.signal).toBeDefined();
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    await fetchWithTimeout("https://example.com");
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("converts TimeoutError into a user-friendly message", async () => {
+    spyOn(globalThis, `fetch`).mockImplementation(async () => {
+      const err = new DOMException("The operation timed out.", "TimeoutError");
+      throw err;
+    });
+
+    await expect(fetchWithTimeout("https://example.com")).rejects.toThrow(
+      "Upgrade timed out after 30 s. Check your network connection and retry.",
+    );
+  });
+
+  it("re-throws non-timeout errors unchanged", async () => {
+    const networkError = new TypeError("fetch failed: ENOTCONN");
+    spyOn(globalThis, `fetch`).mockImplementation(async () => {
+      throw networkError;
+    });
+
+    await expect(fetchWithTimeout("https://example.com")).rejects.toThrow(
+      "fetch failed: ENOTCONN",
+    );
+  });
+
+  it("returns the response when fetch succeeds", async () => {
+    spyOn(globalThis, `fetch`).mockImplementation(
+      async () => new Response("ok", { status: 200 }),
+    );
+
+    const res = await fetchWithTimeout("https://example.com");
+    expect(res.status).toBe(200);
   });
 });
