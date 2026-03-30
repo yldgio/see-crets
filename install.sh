@@ -387,7 +387,8 @@ main() {
   info "Next steps:"
   info "  1. Verify:          see-crets --version"
   info "  2. Set backend:     export SEE_CRETS_BACKEND=keychain  # or: libsecret, pass"
-  info "  3. Try it:          see-crets set mykey myvalue"
+  info "  3. Try it:          see-crets set my-secret-key"
+  info "                      # You will be prompted for the value (hidden)"
   info ""
   info "Docs: https://github.com/${REPO}#readme"
 }
