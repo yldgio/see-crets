@@ -74,6 +74,11 @@ Reference stored secrets with the `{{SECRET:key}}` placeholder:
 curl -H "Authorization: Bearer {{SECRET:my-app/github-token}}" https://api.github.com/user
 ```
 
+> **⚠ Copilot CLI users:** The `{{SECRET:key}}` placeholder syntax is **not supported** in GitHub Copilot CLI.  
+> The pre-secrets hook will **deny** any tool call containing `{{SECRET:...}}` placeholders rather than resolving them.  
+> In Copilot CLI, use **auto-injection via env-map** instead — see the section below.  
+> Placeholder resolution works in: Claude Code ✅ · OpenCode ✅ · Copilot CLI ❌
+
 Or rely on automatic env-var injection for well-known tools:
 
 ```bash

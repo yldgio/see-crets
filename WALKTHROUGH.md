@@ -155,6 +155,11 @@ _SC_0='ghp_abc123...'  # passed via the env map, dies with the subprocess
 
 > 🔒 **Tier 2+** — Placeholder resolution requires the runtime plugin (or hook) to be installed.
 
+> **⚠ Copilot CLI users:** The `{{SECRET:key}}` placeholder syntax is **not supported** in GitHub Copilot CLI.  
+> The pre-secrets hook will **deny** any tool call containing `{{SECRET:...}}` placeholders rather than resolving them.  
+> In Copilot CLI, use **auto-injection via env-map** instead — see Strategy B below.  
+> Placeholder resolution works in: Claude Code ✅ · OpenCode ✅ · Copilot CLI ❌
+
 ### Strategy B — Automatic env-var injection
 
 For tools that read from the environment, no placeholder syntax is needed. The built-in map automatically injects `GITHUB_TOKEN` when `my-app/github-token` is stored:
