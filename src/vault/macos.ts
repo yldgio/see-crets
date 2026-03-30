@@ -16,7 +16,18 @@ import type { VaultBackend } from "./types.ts";
 const TARGET_PREFIX = "see-crets:";
 const ACCOUNT = "see-crets";
 
-/** Minimal runner type for list() — injectable for unit tests (see git.ts Spawner pattern). */
+// Module-level cache: populated on first list() call, lives for process lifetime.
+// Reset via clearKeychainListCache() in tests.
+let _keychainListCache: string[] | null = null;
+
+/** Clears the keychain list cache. Intended for use in tests to ensure a fresh
+ *  fetch between test cases. In production code the cache lives for the full
+ *  process lifetime and is invalidated automatically by set() / delete(). */
+export function clearKeychainListCache(): void {
+  _keychainListCache = null;
+}
+
+/** Minimal runner type for list() -- injectable for unit tests (see git.ts Spawner pattern). */
 type ListRunner = (args: string[]) => { stdout: string; stderr: string; exitCode: number };
 
 function shRun(
@@ -89,6 +100,7 @@ export class MacosVaultBackend implements VaultBackend {
         `Failed to store credential '${key}': ${r.stderr.trim()}`
       );
     }
+    _keychainListCache = null; // invalidate after write
   }
 
   async get(key: string): Promise<string | null> {
@@ -123,6 +135,7 @@ export class MacosVaultBackend implements VaultBackend {
         `Failed to delete credential '${key}': ${r.stderr.trim()}`
       );
     }
+    _keychainListCache = null; // invalidate after delete
   }
 
   async list(prefix: string, runner: ListRunner = shRun): Promise<string[]> {
@@ -132,42 +145,49 @@ export class MacosVaultBackend implements VaultBackend {
       );
     }
 
-    // Scope the keychain dump to the user's login keychain so that we never
-    // read system keychains, iCloud keychains, or other users' keychains.
-    // Without a path argument `security dump-keychain` dumps ALL entries in
-    // the default search list — browser passwords, Wi-Fi keys, app tokens, etc.
-    // Passing ~/Library/Keychains/login.keychain-db restricts the dump to the
-    // single file where see-crets items are stored (the .db extension is the
-    // standard on macOS 10.9+). If HOME is unset we fall back gracefully.
-    const keychainPath = process.env["HOME"]
-      ? `${process.env["HOME"]}/Library/Keychains/login.keychain-db`
-      : undefined;
-    const args = keychainPath
-      ? ["security", "dump-keychain", keychainPath]
-      : ["security", "dump-keychain"];
-    const r = runner(args);
-    if (r.exitCode !== 0) return [];
+    // Populate cache on first call (process-lifetime memoization).
+    // Stores every see-crets key name (TARGET_PREFIX stripped) so any subsequent
+    // call with a different prefix still benefits from the cached dump.
+    if (_keychainListCache === null) {
+      // Scope the keychain dump to the user's login keychain so that we never
+      // read system keychains, iCloud keychains, or other users' keychains.
+      // Without a path argument `security dump-keychain` dumps ALL entries in
+      // the default search list -- browser passwords, Wi-Fi keys, app tokens, etc.
+      // Passing ~/Library/Keychains/login.keychain-db restricts the dump to the
+      // single file where see-crets items are stored (the .db extension is the
+      // standard on macOS 10.9+). If HOME is unset we fall back gracefully.
+      const keychainPath = process.env["HOME"]
+        ? `${process.env["HOME"]}/Library/Keychains/login.keychain-db`
+        : undefined;
+      const args = keychainPath
+        ? ["security", "dump-keychain", keychainPath]
+        : ["security", "dump-keychain"];
+      const r = runner(args);
+      if (r.exitCode !== 0) return [];
 
-    const fullPrefix = `${TARGET_PREFIX}${prefix}`;
-    const results: string[] = [];
+      const allKeys: string[] = [];
 
-    // Each entry starts with a "keychain:" header line. Split on that to get
-    // per-entry blocks, then check both "svce" and "acct" within the same
-    // block to exclude entries from other apps with a coincidentally matching
-    // service name.
-    const blocks = r.stdout.split(/^keychain:/m);
-    for (const block of blocks) {
-      const svceMatch = /"svce"<blob>="([^"]+)"/.exec(block);
-      const acctMatch = /"acct"<blob>="([^"]+)"/.exec(block);
-      if (
-        svceMatch &&
-        acctMatch &&
-        svceMatch[1].startsWith(fullPrefix) &&
-        acctMatch[1] === ACCOUNT
-      ) {
-        results.push(svceMatch[1].slice(TARGET_PREFIX.length));
+      // Each entry starts with a "keychain:" header line. Split on that to get
+      // per-entry blocks, then check both "svce" and "acct" within the same
+      // block to exclude entries from other apps with a coincidentally matching
+      // service name.
+      const blocks = r.stdout.split(/^keychain:/m);
+      for (const block of blocks) {
+        const svceMatch = /"svce"<blob>="([^"]+)"/.exec(block);
+        const acctMatch = /"acct"<blob>="([^"]+)"/.exec(block);
+        if (
+          svceMatch &&
+          acctMatch &&
+          svceMatch[1].startsWith(TARGET_PREFIX) &&
+          acctMatch[1] === ACCOUNT
+        ) {
+          allKeys.push(svceMatch[1].slice(TARGET_PREFIX.length));
+        }
       }
+      _keychainListCache = allKeys;
     }
-    return results;
+
+    // Filter the cached full key list by the requested prefix.
+    return _keychainListCache.filter((k) => k.startsWith(prefix));
   }
 }
