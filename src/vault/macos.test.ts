@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import type { VaultBackend } from "../vault/types.ts";
-import { MacosVaultBackend } from "./macos.ts";
+import { MacosVaultBackend, clearKeychainListCache } from "./macos.ts";
 
 // ---------------------------------------------------------------------------
 // Mock vault backend (in-memory, no OS calls)
@@ -36,7 +36,7 @@ function createMockBackend(
 }
 
 // ---------------------------------------------------------------------------
-// VaultBackend contract tests (via in-memory mock — no OS calls)
+// VaultBackend contract tests (via in-memory mock -- no OS calls)
 // ---------------------------------------------------------------------------
 
 describe("VaultBackend contract", () => {
@@ -107,7 +107,7 @@ describe("VaultBackend contract", () => {
 });
 
 // ---------------------------------------------------------------------------
-// MacosVaultBackend unit tests (key validation — no OS calls for these)
+// MacosVaultBackend unit tests (key validation -- no OS calls for these)
 // ---------------------------------------------------------------------------
 
 describe("MacosVaultBackend key validation", () => {
@@ -163,21 +163,14 @@ describe("MacosVaultBackend key validation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// MacosVaultBackend list() — dump-keychain keychain-scoping tests
-//
-// These tests exercise the keychain-path scoping added in issue #57 by
-// injecting a mock runner (the same pattern used in git.ts / git.test.ts).
-// No real `security` binary is needed.
-// (Issue #57 fix is included in the bugfix/fix-scrub-fail-closed branch
-// alongside issue #46 and other security hardening changes.)
+// MacosVaultBackend list() -- dump-keychain keychain-scoping tests
 // ---------------------------------------------------------------------------
 
-describe("MacosVaultBackend list() — keychain scoping", () => {
+describe("MacosVaultBackend list() -- keychain scoping", () => {
   const backend = new MacosVaultBackend();
 
   const HOME = "/Users/testuser";
 
-  // Fake dump output: one valid see-crets entry plus two that must be excluded.
   const keychainDump = [
     `keychain: "${HOME}/Library/Keychains/login.keychain-db"`,
     ``,
@@ -185,11 +178,11 @@ describe("MacosVaultBackend list() — keychain scoping", () => {
     `"svce"<blob>="see-crets:my-project/github-token"`,
     `"acct"<blob>="see-crets"`,
     ``,
-    `keychain: "wrong account sentinel — must be excluded"`,
+    `keychain: "wrong account sentinel -- must be excluded"`,
     `"svce"<blob>="see-crets:my-project/npm-token"`,
     `"acct"<blob>="other-app"`,
     ``,
-    `keychain: "wrong service prefix — must be excluded"`,
+    `keychain: "wrong service prefix -- must be excluded"`,
     `"svce"<blob>="not-see-crets:my-project/key"`,
     `"acct"<blob>="see-crets"`,
   ].join("\n");
@@ -197,6 +190,7 @@ describe("MacosVaultBackend list() — keychain scoping", () => {
   let savedHome: string | undefined;
 
   beforeEach(() => {
+    clearKeychainListCache(); // each test must see a fresh cache
     savedHome = process.env["HOME"];
   });
 
@@ -234,7 +228,7 @@ describe("MacosVaultBackend list() — keychain scoping", () => {
     expect(capturedArgs).toEqual(["security", "dump-keychain"]);
   });
 
-  it("filters by TARGET_PREFIX and ACCOUNT sentinel — returns only matching keys", async () => {
+  it("filters by TARGET_PREFIX and ACCOUNT sentinel -- returns only matching keys", async () => {
     process.env["HOME"] = HOME;
     const runner = (_args: string[]) => ({
       stdout: keychainDump,
@@ -243,8 +237,104 @@ describe("MacosVaultBackend list() — keychain scoping", () => {
     });
     const results = await backend.list("my-project/", runner);
     expect(results).toContain("my-project/github-token");
-    expect(results).not.toContain("my-project/npm-token"); // excluded: wrong account sentinel
-    expect(results).not.toContain("my-project/key");      // excluded: wrong service prefix
+    expect(results).not.toContain("my-project/npm-token");
+    expect(results).not.toContain("my-project/key");
     expect(results).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MacosVaultBackend list() -- memoization cache tests (#53)
+// ---------------------------------------------------------------------------
+
+describe("MacosVaultBackend list() -- memoization cache", () => {
+  const backend = new MacosVaultBackend();
+  const HOME = "/Users/testuser";
+
+  const keychainDump = [
+    `keychain: "entry-a"`,
+    `"svce"<blob>="see-crets:my-project/token-a"`,
+    `"acct"<blob>="see-crets"`,
+    ``,
+    `keychain: "entry-b"`,
+    `"svce"<blob>="see-crets:other-project/token-b"`,
+    `"acct"<blob>="see-crets"`,
+  ].join("\n");
+
+  let savedHome: string | undefined;
+
+  beforeEach(() => {
+    clearKeychainListCache();
+    savedHome = process.env["HOME"];
+    process.env["HOME"] = HOME;
+  });
+
+  afterEach(() => {
+    clearKeychainListCache();
+    if (savedHome !== undefined) {
+      process.env["HOME"] = savedHome;
+    } else {
+      delete process.env["HOME"];
+    }
+  });
+
+  it("calls the runner only once across multiple list() invocations", async () => {
+    let callCount = 0;
+    const runner = (_args: string[]) => {
+      callCount++;
+      return { stdout: keychainDump, stderr: "", exitCode: 0 };
+    };
+
+    await backend.list("my-project/", runner);
+    await backend.list("my-project/", runner);
+    await backend.list("other-project/", runner);
+
+    expect(callCount).toBe(1);
+  });
+
+  it("returns consistent results from the cache for the same prefix", async () => {
+    const runner = (_args: string[]) => ({
+      stdout: keychainDump,
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const first = await backend.list("my-project/", runner);
+    const second = await backend.list("my-project/", runner);
+
+    expect(first).toEqual(second);
+    expect(first).toContain("my-project/token-a");
+  });
+
+  it("returns the correct filtered subset from the cache for different prefixes", async () => {
+    const runner = (_args: string[]) => ({
+      stdout: keychainDump,
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const projectA = await backend.list("my-project/", runner);
+    const projectB = await backend.list("other-project/", runner);
+
+    expect(projectA).toContain("my-project/token-a");
+    expect(projectA).not.toContain("other-project/token-b");
+    expect(projectB).toContain("other-project/token-b");
+    expect(projectB).not.toContain("my-project/token-a");
+  });
+
+  it("clearKeychainListCache() causes the next list() to re-fetch from the runner", async () => {
+    let callCount = 0;
+    const runner = (_args: string[]) => {
+      callCount++;
+      return { stdout: keychainDump, stderr: "", exitCode: 0 };
+    };
+
+    await backend.list("my-project/", runner);
+    expect(callCount).toBe(1);
+
+    clearKeychainListCache();
+
+    await backend.list("my-project/", runner);
+    expect(callCount).toBe(2);
   });
 });
