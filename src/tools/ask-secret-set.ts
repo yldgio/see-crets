@@ -1,5 +1,6 @@
 import { detectBackend } from "../vault/detect.ts";
 import { getProjectName, isInGitRepo } from "../utils/git.ts";
+import { MIN_SECRET_LENGTH } from "../hook/scrub.ts";
 
 /**
  * Thrown when the user cancels masked input (Ctrl+C).
@@ -9,6 +10,22 @@ export class CancellationError extends Error {
   constructor() {
     super("Input cancelled by user (Ctrl+C)");
     this.name = "CancellationError";
+  }
+}
+
+/**
+ * Emits a warning to stderr when a stored secret value is shorter than the
+ * scrubbing threshold, alerting the operator that the value will NOT be
+ * redacted from LLM output.
+ *
+ * Exported for unit testing — not part of the public API.
+ */
+export function _warnIfShortSecret(qualifiedKey: string, value: string): void {
+  if (value.length < MIN_SECRET_LENGTH) {
+    process.stderr.write(
+      `⚠  Warning: secret '${qualifiedKey}' value is ${value.length} character${value.length === 1 ? "" : "s"} — ` +
+      `values shorter than ${MIN_SECRET_LENGTH} characters are not scrubbed from LLM output.\n`
+    );
   }
 }
 
@@ -88,6 +105,7 @@ export async function askSecretSet(
 
   const backend = await detectBackend();
   await backend.set(qualifiedKey, value);
+  _warnIfShortSecret(qualifiedKey, value);
 
   return {
     stored: true,

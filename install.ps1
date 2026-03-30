@@ -49,6 +49,46 @@ function Exit-Fatal {
     throw $Message
 }
 
+function Verify-Cosign {
+    param(
+        [string]$ChecksumsPath,
+        [string]$ChecksumsUrl
+    )
+
+    if (-not (Get-Command 'cosign' -ErrorAction SilentlyContinue)) {
+        if ($env:COSIGN_ENFORCE -eq '1') {
+            Exit-Fatal "COSIGN_ENFORCE=1 but cosign is not installed. Install cosign and retry."
+        }
+        Write-Warning "cosign not found — skipping out-of-band provenance verification."
+        Write-Warning "For stronger supply-chain guarantees, install cosign: https://docs.sigstore.dev/cosign/installation"
+        return
+    }
+
+    $bundleUrl  = $ChecksumsUrl -replace '\.txt$', '.txt.bundle'
+    $bundlePath = Join-Path $Script:_tmpDir 'checksums.txt.bundle'
+
+    try {
+        Invoke-WebRequest -Uri $bundleUrl -OutFile $bundlePath -UseBasicParsing -ErrorAction Stop
+    } catch {
+        Write-Warning "cosign bundle not available for this release — skipping provenance verification."
+        return
+    }
+
+    $result = & cosign verify-blob `
+        --bundle $bundlePath `
+        --certificate-identity-regexp "https://github.com/yldgio/see-crets/.*" `
+        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" `
+        $ChecksumsPath 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Cosign provenance verified ✓" -ForegroundColor Green
+    } else {
+        Write-Warning "Cosign verification failed — checksums.txt may have been tampered with."
+        if ($env:COSIGN_ENFORCE -eq '1') {
+            Exit-Fatal "Aborting: COSIGN_ENFORCE=1"
+        }
+    }
+}
+
 # ─── Architecture detection ──────────────────────────────────────────────────
 
 $arch    = $env:PROCESSOR_ARCHITECTURE
@@ -196,6 +236,10 @@ if ($actualHash -ne $expectedHash) {
 }
 
 Write-Host "Checksum OK."
+
+# ─── Cosign out-of-band verification (optional) ──────────────────────────────
+
+Verify-Cosign -ChecksumsPath $checksumPath -ChecksumsUrl "$baseUrl/checksums.txt"
 
 # ─── Install ─────────────────────────────────────────────────────────────────
 

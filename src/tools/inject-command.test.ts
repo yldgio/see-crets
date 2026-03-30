@@ -139,7 +139,10 @@ describe("scrubOutput", () => {
     expect(result).toBe(raw);
   });
 
-  it("returns input unchanged on vault error rather than discarding output", async () => {
+  it("throws on vault error — callers decide the fallback policy (fail-closed by default)", async () => {
+    // scrubOutput() no longer swallows vault errors. The old behaviour (returning
+    // raw input on failure) was a fail-open vulnerability: live secrets could reach
+    // the LLM. Callers are now responsible for catching and choosing a policy.
     const brokenBackend: VaultBackend = {
       name: "BrokenVault",
       async isAvailable() {
@@ -156,9 +159,9 @@ describe("scrubOutput", () => {
     };
 
     const raw = "Some tool output with data";
-    const result = await scrubOutput(raw, brokenBackend);
-
-    expect(result).toBe(raw);
+    await expect(scrubOutput(raw, brokenBackend)).rejects.toThrow(
+      "vault unavailable",
+    );
   });
 
   it("does not scrub values shorter than MIN_SECRET_LENGTH (8 chars)", async () => {

@@ -3,13 +3,23 @@
  * the content is returned to the LLM.
  *
  * Rules:
- *  - Only values with length >= 8 are scrubbed (short strings cause false positives).
+ *  - Only values with length >= MIN_SECRET_LENGTH are scrubbed (short strings cause
+ *    false positives on common tokens and substrings).
  *  - Matching is case-sensitive and uses substring (not whole-word) matching, so a
  *    secret embedded inside a JSON blob or URL is still redacted.
  *  - All occurrences in `output` are replaced, not just the first.
  *  - Regex special characters inside the secret value are escaped before matching.
  */
 export const REDACTED = "[REDACTED]";
+
+/**
+ * Minimum secret length for scrubbing. Secrets shorter than this value are
+ * intentionally NOT scrubbed to avoid false positives on common short strings.
+ *
+ * ⚠  Operators should be aware: any vault secret whose value is shorter than
+ * this threshold will appear verbatim in tool output returned to the LLM.
+ * A warning is emitted at store-time (see ask-secret-set.ts).
+ */
 export const MIN_SECRET_LENGTH = 8;
 
 /**
@@ -21,6 +31,11 @@ function escapeRegex(value: string): string {
 
 /**
  * Replace all occurrences of each secret value in `output` with `[REDACTED]`.
+ *
+ * Short secrets (below MIN_SECRET_LENGTH) are intentionally skipped to avoid
+ * false positives — common short strings would produce noisy, broken output.
+ * Operators should store only secrets that are at least MIN_SECRET_LENGTH characters
+ * long if they require redaction; shorter values will appear verbatim in LLM output.
  *
  * @param output  The raw string to scrub (e.g. subprocess stdout/stderr).
  * @param secrets The resolved secret values to search for. Order does not matter.

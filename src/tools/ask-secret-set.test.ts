@@ -1,5 +1,6 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect, mock, spyOn } from "bun:test";
 import type { VaultBackend } from "../vault/types.ts";
+import { _warnIfShortSecret } from "./ask-secret-set.ts";
 
 // ---------------------------------------------------------------------------
 // Shared mock factory
@@ -181,6 +182,75 @@ describe("askSecretSet — additional integration tests", () => {
       expect(result).not.toHaveProperty("value");
     } finally {
       (process.stdin as NodeJS.ReadStream & { isTTY: boolean }).isTTY = originalIsTTY;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Short-secret warning tests
+// ---------------------------------------------------------------------------
+
+describe("_warnIfShortSecret — short secret scrubbing warning", () => {
+  it("emits a warning on stderr when value is shorter than MIN_SECRET_LENGTH", () => {
+    const spy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      _warnIfShortSecret("proj/pin", "123");
+      expect(spy).toHaveBeenCalled();
+      const output = (spy.mock.calls as unknown as [string][])
+        .map(([arg]) => arg)
+        .join("");
+      expect(output).toContain("Warning");
+      expect(output).toContain("proj/pin");
+      expect(output).toContain("not scrubbed from LLM output");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does NOT emit a warning on stderr when value is >= MIN_SECRET_LENGTH", () => {
+    const spy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      _warnIfShortSecret("proj/token", "secure_token_123456");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does NOT emit a warning for a value of exactly MIN_SECRET_LENGTH characters", () => {
+    const spy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      _warnIfShortSecret("proj/exactly8", "12345678");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("uses singular 'character' grammar for a value of length 1", () => {
+    const spy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      _warnIfShortSecret("proj/x", "a");
+      const output = (spy.mock.calls as unknown as [string][])
+        .map(([arg]) => arg)
+        .join("");
+      expect(output).toContain("1 character —");
+      expect(output).not.toContain("1 characters");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("uses plural 'characters' grammar for a value of length > 1", () => {
+    const spy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      _warnIfShortSecret("proj/short", "abc");
+      const output = (spy.mock.calls as unknown as [string][])
+        .map(([arg]) => arg)
+        .join("");
+      expect(output).toContain("3 characters —");
+    } finally {
+      spy.mockRestore();
     }
   });
 });

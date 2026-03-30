@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import type { VaultBackend } from "../vault/types.ts";
 import { MacosVaultBackend } from "./macos.ts";
 
@@ -159,5 +159,92 @@ describe("MacosVaultBackend key validation", () => {
     await expect(
       validatingBackend.set("my-project/github-token", "val"),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MacosVaultBackend list() — dump-keychain keychain-scoping tests
+//
+// These tests exercise the keychain-path scoping added in issue #57 by
+// injecting a mock runner (the same pattern used in git.ts / git.test.ts).
+// No real `security` binary is needed.
+// (Issue #57 fix is included in the bugfix/fix-scrub-fail-closed branch
+// alongside issue #46 and other security hardening changes.)
+// ---------------------------------------------------------------------------
+
+describe("MacosVaultBackend list() — keychain scoping", () => {
+  const backend = new MacosVaultBackend();
+
+  const HOME = "/Users/testuser";
+
+  // Fake dump output: one valid see-crets entry plus two that must be excluded.
+  const keychainDump = [
+    `keychain: "${HOME}/Library/Keychains/login.keychain-db"`,
+    ``,
+    `keychain: "valid see-crets entry"`,
+    `"svce"<blob>="see-crets:my-project/github-token"`,
+    `"acct"<blob>="see-crets"`,
+    ``,
+    `keychain: "wrong account sentinel — must be excluded"`,
+    `"svce"<blob>="see-crets:my-project/npm-token"`,
+    `"acct"<blob>="other-app"`,
+    ``,
+    `keychain: "wrong service prefix — must be excluded"`,
+    `"svce"<blob>="not-see-crets:my-project/key"`,
+    `"acct"<blob>="see-crets"`,
+  ].join("\n");
+
+  let savedHome: string | undefined;
+
+  beforeEach(() => {
+    savedHome = process.env["HOME"];
+  });
+
+  afterEach(() => {
+    if (savedHome !== undefined) {
+      process.env["HOME"] = savedHome;
+    } else {
+      delete process.env["HOME"];
+    }
+  });
+
+  it("passes the login keychain path to dump-keychain when HOME is set", async () => {
+    process.env["HOME"] = HOME;
+    let capturedArgs: string[] | undefined;
+    const runner = (args: string[]) => {
+      capturedArgs = args;
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    await backend.list("my-project/", runner);
+    expect(capturedArgs).toEqual([
+      "security",
+      "dump-keychain",
+      `${HOME}/Library/Keychains/login.keychain-db`,
+    ]);
+  });
+
+  it("omits the keychain path from dump-keychain when HOME is not set", async () => {
+    delete process.env["HOME"];
+    let capturedArgs: string[] | undefined;
+    const runner = (args: string[]) => {
+      capturedArgs = args;
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    await backend.list("my-project/", runner);
+    expect(capturedArgs).toEqual(["security", "dump-keychain"]);
+  });
+
+  it("filters by TARGET_PREFIX and ACCOUNT sentinel — returns only matching keys", async () => {
+    process.env["HOME"] = HOME;
+    const runner = (_args: string[]) => ({
+      stdout: keychainDump,
+      stderr: "",
+      exitCode: 0,
+    });
+    const results = await backend.list("my-project/", runner);
+    expect(results).toContain("my-project/github-token");
+    expect(results).not.toContain("my-project/npm-token"); // excluded: wrong account sentinel
+    expect(results).not.toContain("my-project/key");      // excluded: wrong service prefix
+    expect(results).toHaveLength(1);
   });
 });

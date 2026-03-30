@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { rename, writeFile, chmod } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { execSync } from "child_process";
 import { join, dirname } from "node:path";
 import { isCompiledBinary } from "./uninstall-command.ts";
@@ -154,6 +155,99 @@ export function parseChecksums(
 }
 
 // ---------------------------------------------------------------------------
+// Cosign out-of-band verification (optional)
+// ---------------------------------------------------------------------------
+
+/**
+ * Optionally verifies that `checksums.txt` was signed by the GitHub Actions
+ * OIDC token via a Sigstore cosign bundle.  Provides an independent integrity
+ * layer: even if an attacker replaces both the binary AND checksums.txt on
+ * GitHub, they cannot forge a valid cosign bundle without controlling the
+ * Actions OIDC issuer (token.actions.githubusercontent.com).
+ *
+ * Soft by default — set COSIGN_ENFORCE=1 in the environment to make
+ * verification failures fatal.
+ */
+async function verifyCosignBundle(
+  tag: string,
+  _assetName: string,
+  checksumContent: string,
+): Promise<void> {
+  // Check if cosign is available — Bun.spawnSync throws when the binary is
+  // not found in PATH, so we must wrap the probe in try/catch.
+  let cosignAvailable = false;
+  try {
+    const cosignCheck = Bun.spawnSync(["cosign", "version"], { stderr: "ignore" });
+    cosignAvailable = cosignCheck.exitCode === 0;
+  } catch {
+    // Binary not found — treat as absent
+  }
+
+  if (!cosignAvailable) {
+    if (process.env["COSIGN_ENFORCE"] === "1") {
+      throw new Error(
+        "COSIGN_ENFORCE=1 but cosign is not installed. Install cosign and retry.",
+      );
+    }
+    process.stderr.write(
+      "[see-crets upgrade] cosign not found — skipping out-of-band provenance verification.\n",
+    );
+    return;
+  }
+
+  const bundleUrl = `${GITHUB_DOWNLOAD_BASE}/${tag}/checksums.txt.bundle`;
+  let bundleBuf: Buffer;
+  try {
+    bundleBuf = await downloadBuffer(bundleUrl);
+  } catch {
+    process.stderr.write(
+      "[see-crets upgrade] cosign bundle not available for this release — skipping provenance verification.\n",
+    );
+    return;
+  }
+
+  const tmpBase = tmpdir();
+  const bundlePath = join(tmpBase, `see-crets-bundle-${Date.now()}.json`);
+  const checksumsPath = join(tmpBase, `see-crets-checksums-${Date.now()}.txt`);
+  try {
+    await Bun.write(bundlePath, bundleBuf);
+    await Bun.write(checksumsPath, checksumContent);
+
+    const result = Bun.spawnSync(
+      [
+        "cosign",
+        "verify-blob",
+        "--bundle",
+        bundlePath,
+        "--certificate-identity-regexp",
+        "https://github.com/yldgio/see-crets/.*",
+        "--certificate-oidc-issuer",
+        "https://token.actions.githubusercontent.com",
+        checksumsPath,
+      ],
+      { stderr: "pipe" },
+    );
+
+    if (result.exitCode === 0) {
+      process.stderr.write("[see-crets upgrade] Cosign provenance verified ✓\n");
+    } else {
+      const errMsg = result.stderr.toString().trim();
+      if (process.env["COSIGN_ENFORCE"] === "1") {
+        throw new Error(
+          `Cosign verification failed: ${errMsg}. Aborting (COSIGN_ENFORCE=1).`,
+        );
+      }
+      process.stderr.write(
+        `[see-crets upgrade] ⚠ Cosign verification failed: ${errMsg}\n`,
+      );
+    }
+  } finally {
+    try { unlinkSync(bundlePath); } catch { /* ignore */ }
+    try { unlinkSync(checksumsPath); } catch { /* ignore */ }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Core download + replace logic
 // ---------------------------------------------------------------------------
 
@@ -193,6 +287,9 @@ export async function downloadAndReplaceBinary(
       `SHA256 mismatch — expected ${expectedHash}, got ${actualHash}`,
     );
   }
+
+  // Optional cosign out-of-band provenance verification
+  await verifyCosignBundle(tag, assetName, checksumContent);
 
   // Atomic write: temp file → rename
   const dir = dirname(execPath);
