@@ -187,9 +187,12 @@ verify_sha256() {
     actual="$(sha256sum "${binary}" | awk '{print $1}')"
   elif command -v shasum >/dev/null 2>&1; then
     actual="$(shasum -a 256 "${binary}" | awk '{print $1}')"
+  elif command -v openssl >/dev/null 2>&1; then
+    actual="$(openssl dgst -sha256 "${binary}" | awk '{print $NF}')"
+  elif command -v python3 >/dev/null 2>&1; then
+    actual="$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "${binary}")"
   else
-    warn "No SHA-256 tool found (sha256sum / shasum). Skipping verification."
-    return 0
+    die "No SHA-256 tool found (sha256sum / shasum / openssl / python3). Install one and retry."
   fi
 
   if [ "${expected}" != "${actual}" ]; then
