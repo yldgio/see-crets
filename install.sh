@@ -236,14 +236,16 @@ verify_cosign() {
     return 0
   fi
 
-  cosign verify-blob \
+  if cosign verify-blob \
     --bundle "${bundle}" \
     --certificate-identity-regexp "https://github.com/yldgio/see-crets/.*" \
     --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-    "${checksums}" \
-    && info "Cosign provenance verified ✓" \
-    || { warn "Cosign verification failed — checksums.txt may have been tampered with."; \
-         if [ "${COSIGN_ENFORCE:-0}" = "1" ]; then die "Aborting: COSIGN_ENFORCE=1"; fi; }
+    "${checksums}"; then
+    info "Cosign provenance verified ✓"
+  else
+    warn "Cosign verification failed — checksums.txt may have been tampered with."
+    if [ "${COSIGN_ENFORCE:-0}" = "1" ]; then die "Aborting: COSIGN_ENFORCE=1"; fi
+  fi
 }
 
 # ── PATH guidance ─────────────────────────────────────────────────────────────
