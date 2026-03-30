@@ -16,6 +16,9 @@ import type { VaultBackend } from "./types.ts";
 const TARGET_PREFIX = "see-crets:";
 const ACCOUNT = "see-crets";
 
+/** Minimal runner type for list() — injectable for unit tests (see git.ts Spawner pattern). */
+type ListRunner = (args: string[]) => { stdout: string; stderr: string; exitCode: number };
+
 function shRun(
   args: string[],
   opts?: { env?: Record<string, string>; stdin?: Buffer }
@@ -122,25 +125,36 @@ export class MacosVaultBackend implements VaultBackend {
     }
   }
 
-  async list(prefix: string): Promise<string[]> {
+  async list(prefix: string, runner: ListRunner = shRun): Promise<string[]> {
     if (/[*?]/.test(prefix)) {
       throw new Error(
         `list() prefix must not contain wildcard characters: "${prefix}"`
       );
     }
 
-    // dump-keychain outputs all keychain entries. We parse per-entry blocks
-    // and filter by BOTH the service prefix AND the account sentinel so that
-    // entries created by other apps with a coincidentally matching service
-    // name are excluded.
-    const r = shRun(["security", "dump-keychain"]);
+    // Scope the keychain dump to the user's login keychain so that we never
+    // read system keychains, iCloud keychains, or other users' keychains.
+    // Without a path argument `security dump-keychain` dumps ALL entries in
+    // the default search list — browser passwords, Wi-Fi keys, app tokens, etc.
+    // Passing ~/Library/Keychains/login.keychain-db restricts the dump to the
+    // single file where see-crets items are stored (the .db extension is the
+    // standard on macOS 10.9+). If HOME is unset we fall back gracefully.
+    const keychainPath = process.env["HOME"]
+      ? `${process.env["HOME"]}/Library/Keychains/login.keychain-db`
+      : undefined;
+    const args = keychainPath
+      ? ["security", "dump-keychain", keychainPath]
+      : ["security", "dump-keychain"];
+    const r = runner(args);
     if (r.exitCode !== 0) return [];
 
     const fullPrefix = `${TARGET_PREFIX}${prefix}`;
     const results: string[] = [];
 
     // Each entry starts with a "keychain:" header line. Split on that to get
-    // per-entry blocks, then check both "svce" and "acct" within the same block.
+    // per-entry blocks, then check both "svce" and "acct" within the same
+    // block to exclude entries from other apps with a coincidentally matching
+    // service name.
     const blocks = r.stdout.split(/^keychain:/m);
     for (const block of blocks) {
       const svceMatch = /"svce"<blob>="([^"]+)"/.exec(block);
