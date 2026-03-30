@@ -168,6 +168,8 @@ describe("MacosVaultBackend key validation", () => {
 // These tests exercise the keychain-path scoping added in issue #57 by
 // injecting a mock runner (the same pattern used in git.ts / git.test.ts).
 // No real `security` binary is needed.
+// (Issue #57 fix is included in the bugfix/fix-scrub-fail-closed branch
+// alongside issue #46 and other security hardening changes.)
 // ---------------------------------------------------------------------------
 
 describe("MacosVaultBackend list() — keychain scoping", () => {

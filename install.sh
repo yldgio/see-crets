@@ -192,7 +192,12 @@ verify_sha256() {
   elif command -v python3 >/dev/null 2>&1; then
     actual="$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "${binary}")"
   else
-    die "No SHA-256 tool found (sha256sum / shasum / openssl / python3). Install one and retry."
+    if [ "${INSTALL_SKIP_INTEGRITY_CHECK:-0}" = "1" ]; then
+      warn "No SHA-256 tool found — INSTALL_SKIP_INTEGRITY_CHECK=1 set, proceeding without integrity check."
+      warn "This is insecure. Install sha256sum, shasum, openssl, or python3 to enable verification."
+      return 0
+    fi
+    die "No SHA-256 tool found (sha256sum / shasum / openssl / python3). Install one and retry, or set INSTALL_SKIP_INTEGRITY_CHECK=1 to bypass (not recommended)."
   fi
 
   if [ "${expected}" != "${actual}" ]; then

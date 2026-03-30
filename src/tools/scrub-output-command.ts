@@ -64,8 +64,10 @@ export const OUTPUT_SUPPRESSED_MSG =
  * Always exits 0. Fails **closed** by default — output is suppressed (not leaked)
  * when the vault is unavailable. This is intentional: the old "never lose output"
  * contract was the vulnerability. Use `--fail-open` to restore it explicitly.
+ *
+ * @param backend  Optional vault backend override (used in tests to avoid module mocking).
  */
-export async function runScrubOutputCommand(): Promise<void> {
+export async function runScrubOutputCommand(backend?: VaultBackend): Promise<void> {
   const failOpen = process.argv.includes("--fail-open");
   let input = "";
   try {
@@ -75,7 +77,7 @@ export async function runScrubOutputCommand(): Promise<void> {
     return;
   }
   try {
-    const scrubbed = await scrubOutput(input);
+    const scrubbed = await scrubOutput(input, backend);
     process.stdout.write(scrubbed);
   } catch {
     if (failOpen) {
