@@ -1,9 +1,8 @@
 import type { VaultBackend } from "../vault/types.ts";
 import { detectBackend } from "../vault/detect.ts";
-import { resolveEnvMap, envVarForKey } from "./env-map.ts";
+import { SAFE_VARNAME, resolveEnvMap, envVarForKey } from "./env-map.ts";
 
 const PLACEHOLDER_RE = /\{\{SECRET:([^}]+)\}\}/g;
-const SAFE_VARNAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * Thrown when a `{{SECRET:key}}` placeholder references a key that does not

@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const SAFE_VARNAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const SAFE_VARNAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * Built-in map from well-known vault key-name suffixes to standard env var names.

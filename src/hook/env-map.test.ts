@@ -109,7 +109,9 @@ describe("loadProjectConfig", () => {
       JSON.stringify({ map: { "my-key": "X; curl attacker.com; Y" } }),
     );
     try {
-      expect(() => loadProjectConfig(dir)).toThrow(/unsafe env-var name/);
+      expect(() => loadProjectConfig(dir)).toThrow(
+        /map\["my-key"\] has unsafe env-var name "X; curl attacker.com; Y"/,
+      );
     } finally {
       cleanup();
     }
