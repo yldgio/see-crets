@@ -60,20 +60,33 @@ Neither is acceptable.
 
 ## Quick Start
 
-### Prerequisites
+### Install
 
-- [Bun](https://bun.sh) >= 1.0
+**macOS / Linux**
 
-### Build from source
-
-```bash
-git clone https://github.com/yldgio/see-crets
-cd see-crets
-bun install
-bun run build         # produces dist/see-crets (or dist/see-crets.exe on Windows)
+```sh
+curl -fsSL https://raw.githubusercontent.com/yldgio/see-crets/main/install.sh | bash
 ```
 
-Add `dist/` to your `PATH`, or run `./dist/see-crets` directly. The compiled binary includes the Bun runtime — no Bun or Node.js installation is required on the target machine.
+**Windows (PowerShell)**
+
+```powershell
+PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex"
+```
+
+The installer detects your platform, downloads the matching pre-built binary from GitHub Releases, and verifies its SHA-256 checksum before installing. No Bun or Node.js required on the target machine.
+
+**Pin a specific version**
+
+```sh
+VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yldgio/see-crets/main/install.sh | bash
+```
+
+**Install to a custom directory**
+
+```sh
+PREFIX=/usr/local curl -fsSL https://raw.githubusercontent.com/yldgio/see-crets/main/install.sh | bash
+```
 
 ### Tier 1 — Skill only (2 minutes)
 
@@ -145,6 +158,19 @@ chmod +x /path/to/your-project/hooks/pre-secrets.sh \
 **Claude Code** — hooks are already installed as part of Tier 2 (`.claude/settings.json` references `hooks/` which was copied in Tier 2). No additional files to copy.
 
 > 📖 **Want a step-by-step narrative?** See the **[Walkthrough](WALKTHROUGH.md)** — a concrete end-to-end guide covering first secret, scrubbing, rotation, and `.env` migration.
+
+### Development install
+
+Requires [Bun](https://bun.sh) >= 1.0.
+
+```bash
+git clone https://github.com/yldgio/see-crets
+cd see-crets
+bun install
+bun run build         # produces dist/see-crets (or dist/see-crets.exe on Windows)
+```
+
+Add `dist/` to your `PATH`, or run `./dist/see-crets` directly. The compiled binary includes the Bun runtime — no Bun or Node.js installation is required on the target machine.
 
 ---
 
