@@ -126,7 +126,9 @@ export async function injectSecrets(
       const targetVar = envVarForKey(qualifiedKey, envMap);
       if (!targetVar) continue;
       if (!SAFE_VARNAME.test(targetVar)) {
-        throw new Error(`Unsafe env-var name from project map: "${targetVar}"`);
+        throw new Error(
+          `Unsafe env-var name from project map for key "${qualifiedKey}": "${targetVar}"`,
+        );
       }
       // Skip if this key was already injected via a placeholder.
       if (keys.includes(qualifiedKey)) continue;
