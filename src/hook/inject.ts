@@ -1,6 +1,6 @@
 import type { VaultBackend } from "../vault/types.ts";
 import { detectBackend } from "../vault/detect.ts";
-import { resolveEnvMap, envVarForKey } from "./env-map.ts";
+import { SAFE_VARNAME, resolveEnvMap, envVarForKey } from "./env-map.ts";
 
 const PLACEHOLDER_RE = /\{\{SECRET:([^}]+)\}\}/g;
 
@@ -125,6 +125,11 @@ export async function injectSecrets(
     for (const qualifiedKey of sortedKeys) {
       const targetVar = envVarForKey(qualifiedKey, envMap);
       if (!targetVar) continue;
+      if (!SAFE_VARNAME.test(targetVar)) {
+        throw new Error(
+          `Unsafe env-var name from project map for key "${qualifiedKey}": "${targetVar}"`,
+        );
+      }
       // Skip if this key was already injected via a placeholder.
       if (keys.includes(qualifiedKey)) continue;
       // First matching key for this env var wins (project > global precedence).
