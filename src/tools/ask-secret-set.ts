@@ -72,10 +72,18 @@ export async function askSecretSet(
         : "";
       const existing = await backend.list(prefix);
       if (existing.includes(qualifiedKey)) {
-        const nsFromKey = qualifiedKey.includes("/")
-          ? qualifiedKey.slice(0, qualifiedKey.lastIndexOf("/"))
-          : ns;
-        return { stored: true, key: qualifiedKey, namespace: nsFromKey };
+        return {
+          stored: false,
+          key: qualifiedKey,
+          instructions: [
+            `Key '${qualifiedKey}' already exists in the vault.`,
+            `To update it, open a terminal and run:`,
+            ``,
+            `  see-crets set ${qualifiedKey}`,
+            ``,
+            `Then re-run your current task — the agent will find the updated key.`,
+          ].join("\n"),
+        };
       }
     } catch {
       // Vault unavailable in CI — fall through to instructions
