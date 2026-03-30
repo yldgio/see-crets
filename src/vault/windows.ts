@@ -135,16 +135,6 @@ function validateKey(key: string): void {
       `Invalid key '${key}': key must not have leading or trailing whitespace`
     );
   }
-  if (/\\/.test(key)) {
-    throw new Error(
-      `Invalid key '${key}': key must not contain backslashes`
-    );
-  }
-  if (key.startsWith("/") || key.endsWith("/") || key.includes("//")) {
-    throw new Error(
-      `Invalid key '${key}': key must not start or end with '/' or contain '//'`
-    );
-  }
   if (key.split("/").some((seg) => seg === ".." || seg === ".")) {
     throw new Error(
       `Invalid key '${key}': key must not contain path traversal segments`

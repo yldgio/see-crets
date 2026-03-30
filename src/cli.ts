@@ -71,17 +71,13 @@ Usage: see-crets <command> [options]
 
 Commands:
   set <key>              Store a secret (masked input)
-  get <key>              Retrieve a secret value
-  delete <key>           Delete a secret from the vault
   list                   List key names for current project + global
+  detect                 Report vault backend health
+  delete <key>           Delete a secret from the vault
+  rotate <key>           Replace a secret value (masked input, no delete/re-add)
   purge                  Remove ALL secrets for the current project namespace
-  rotate <key>           Replace a secret value (masked input)
-  inject                 Inject secrets as environment variables
-  scrub-output           Scrub secret values from stdout/stderr
   uninstall              Remove the see-crets binary (vault data preserved)
   upgrade                Self-update to the latest release from GitHub
-  ask-secret-set         Prompt for a secret and store it
-  scrub-output-command   Run a command with output scrubbing
 
 Options:
   --version, -v          Print version and exit
@@ -109,7 +105,15 @@ if (projectIdx !== -1 && args[projectIdx + 1]) {
 }
 
 // Parse --global flag - sets projectFlag to "global"; mutually exclusive with --project.
-const globalIdx = args.indexOf("--global");
+const globalIndices = args.reduce<number[]>(
+  (acc, a, i) => (a === "--global" ? [...acc, i] : acc),
+  []
+);
+if (globalIndices.length > 1) {
+  console.error("Error: --global may only be specified once.");
+  process.exit(1);
+}
+const globalIdx = globalIndices[0] ?? -1;
 if (globalIdx !== -1) {
   if (projectIdx !== -1) {
     console.error("Error: --global and --project are mutually exclusive.");
@@ -119,7 +123,15 @@ if (globalIdx !== -1) {
 }
 
 // Parse --yes flag - suppresses confirmation prompts (purge, uninstall).
-const yesIdx = args.indexOf("--yes");
+const yesIndices = args.reduce<number[]>(
+  (acc, a, i) => (a === "--yes" ? [...acc, i] : acc),
+  []
+);
+if (yesIndices.length > 1) {
+  console.error("Error: --yes may only be specified once.");
+  process.exit(1);
+}
+const yesIdx = yesIndices[0] ?? -1;
 const yesFlag = yesIdx !== -1;
 
 /**

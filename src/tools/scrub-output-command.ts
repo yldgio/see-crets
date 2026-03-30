@@ -5,13 +5,15 @@ import type { VaultBackend } from "../vault/types.ts";
 /**
  * Scrubs every vault secret value from `input`.
  *
- * Retrieves **all** values across every namespace by calling `backend.list("")`,
- * mirroring what `injectSecrets()` does in `src/hook/inject.ts`. This is the
- * only safe choice: `injectSecrets()` fetches all namespaces when auto-injecting,
- * so a secret from any namespace (not just the current project or `global/`) can
- * end up in subprocess output. Limiting scrubbing to a subset of namespaces
- * creates a coverage gap where injected secrets survive unscrubbed into LLM
- * context.
+ * Intentionally retrieves **all** values across every namespace by calling
+ * `backend.list("")`, even though `injectSecrets()` (after fix #42) only
+ * auto-injects keys from `${projectName}/` and `global/` when scoped.
+ *
+ * Scrubbing wider than injection is a deliberate defence-in-depth choice:
+ * secrets from any namespace can end up in subprocess output via placeholders,
+ * manual env assignments, or legacy call sites that do not pass `projectName`.
+ * Limiting scrubbing to the injection scope would create a coverage gap where
+ * those secrets survive unscrubbed into LLM context.
  *
  * **Throws** if the vault is unavailable or any vault operation fails.
  * Previously, vault errors were silently swallowed and the raw (potentially
