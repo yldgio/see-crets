@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write  # Required for OIDC keyless signing via cosign
 
 jobs:
   build-and-release:
@@ -62,6 +63,14 @@ jobs:
         working-directory: dist
         run: sha256sum see-crets-* > checksums.txt
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign checksums with cosign (keyless)
+        run: cosign sign-blob --yes dist/checksums.txt --bundle dist/checksums.txt.bundle
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+
       - name: Generate release notes
         id: cliff
         uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4
@@ -82,3 +91,4 @@ jobs:
             dist/see-crets-linux-arm64-musl
             dist/see-crets-windows-x64.exe
             dist/checksums.txt
+            dist/checksums.txt.bundle

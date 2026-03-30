@@ -205,6 +205,42 @@ verify_sha256() {
   info "Checksum verified ✓"
 }
 
+# ── Cosign out-of-band verification (optional) ───────────────────────────────
+# Downloads checksums.txt.bundle from the release and uses cosign to verify
+# that checksums.txt was signed by the GitHub Actions OIDC token, providing an
+# independent integrity layer that survives a compromised GitHub release.
+#
+# Soft by default — set COSIGN_ENFORCE=1 to make failures fatal.
+verify_cosign() {
+  local checksums_url="${1}"
+  local bundle="${TMP_DIR}/checksums.txt.bundle"
+  local checksums="${TMP_DIR}/checksums.txt"
+
+  if ! command -v cosign >/dev/null 2>&1; then
+    if [ "${COSIGN_ENFORCE:-0}" = "1" ]; then
+      die "COSIGN_ENFORCE=1 but cosign is not installed. Install cosign and retry."
+    fi
+    warn "cosign not found — skipping out-of-band provenance verification."
+    warn "For stronger supply-chain guarantees, install cosign: https://docs.sigstore.dev/cosign/installation"
+    return 0
+  fi
+
+  local bundle_url="${checksums_url%.txt}.txt.bundle"
+  if ! fetch "${bundle_url}" "${bundle}" 2>/dev/null; then
+    warn "cosign bundle not available for this release — skipping provenance verification."
+    return 0
+  fi
+
+  cosign verify-blob \
+    --bundle "${bundle}" \
+    --certificate-identity-regexp "https://github.com/yldgio/see-crets/.*" \
+    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+    "${checksums}" \
+    && info "Cosign provenance verified ✓" \
+    || { warn "Cosign verification failed — checksums.txt may have been tampered with."; \
+         if [ "${COSIGN_ENFORCE:-0}" = "1" ]; then die "Aborting: COSIGN_ENFORCE=1"; fi; }
+}
+
 # ── PATH guidance ─────────────────────────────────────────────────────────────
 path_guidance() {
   local install_dir="${1}"
@@ -308,6 +344,7 @@ main() {
     info "Downloading checksums.txt..."
     if fetch "${checksums_url}" "${TMP_DIR}/checksums.txt" 2>/dev/null; then
       verify_sha256 "${TMP_DIR}/${ASSET_NAME}" "${TMP_DIR}/checksums.txt" "${ASSET_NAME}"
+      verify_cosign "${checksums_url}"
     else
       die "Could not download checksums.txt — cannot verify integrity. Aborting."
     fi
