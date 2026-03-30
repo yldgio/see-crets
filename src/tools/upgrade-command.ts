@@ -93,12 +93,41 @@ export function getAssetName(
 // Network helpers (real implementations, overridden in tests)
 // ---------------------------------------------------------------------------
 
+const FETCH_TIMEOUT_MS = 30_000;
+
+/**
+ * Wrapper around `fetch()` that adds a 30-second AbortSignal timeout.
+ * If the caller passes `options.signal`, both signals are merged via
+ * `AbortSignal.any()`, so external cancellation is still honoured.
+ * Converts a `TimeoutError` into a user-friendly message.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  // Merge caller-provided signal with timeout: honour both cancellation sources.
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeoutSignal])
+    : timeoutSignal;
+  try {
+    return await fetch(url, { ...options, signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new Error(
+        "Upgrade timed out after 30 s. Check your network connection and retry.",
+      );
+    }
+    throw err;
+  }
+}
+
 /**
  * Fetches the latest release tag from GitHub.
  * Returns a tag string like "v0.2.0".
  */
 export async function fetchLatestVersionFromGitHub(): Promise<string> {
-  const res = await fetch(GITHUB_API_URL, {
+  const res = await fetchWithTimeout(GITHUB_API_URL, {
     headers: {
       "User-Agent": "see-crets-upgrade",
       Accept: "application/vnd.github+json",
@@ -123,7 +152,7 @@ export async function fetchLatestVersionFromGitHub(): Promise<string> {
  * Downloads a URL and returns the raw buffer.
  */
 async function downloadBuffer(url: string): Promise<Buffer> {
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: { "User-Agent": "see-crets-upgrade" },
   });
 

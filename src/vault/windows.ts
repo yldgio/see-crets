@@ -89,14 +89,14 @@ public class WinCred {
         int count = 0;
         IntPtr pcreds;
         if (!CredEnumerate(prefix + "*", 0, out count, out pcreds)) return new string[0];
-        var targets = new string[count];
+        var targets = new System.Collections.Generic.List<string>();
         for (int i = 0; i < count; i++) {
             IntPtr credPtr = Marshal.ReadIntPtr(pcreds, i * IntPtr.Size);
             var c = (CREDENTIAL)Marshal.PtrToStructure(credPtr, typeof(CREDENTIAL));
-            targets[i] = c.TargetName;
+            if (c.UserName == "see-crets") targets.Add(c.TargetName);
         }
         CredFree(pcreds);
-        return targets;
+        return targets.ToArray();
     }
 }`;
 
@@ -125,6 +125,23 @@ function psEscape(s: string): string {
     .replace(/\r/g, "`r");
 }
 
+/** Shared key validation applied by set(), get(), and delete() */
+function validateKey(key: string): void {
+  if (/[\r\n]/.test(key)) {
+    throw new Error(`Invalid key '${key}': key must not contain newlines`);
+  }
+  if (key !== key.trim()) {
+    throw new Error(
+      `Invalid key '${key}': key must not have leading or trailing whitespace`
+    );
+  }
+  if (key.split("/").some((seg) => seg === ".." || seg === ".")) {
+    throw new Error(
+      `Invalid key '${key}': key must not contain path traversal segments`
+    );
+  }
+}
+
 export class WindowsVaultBackend implements VaultBackend {
   readonly name = "Windows Credential Manager";
 
@@ -134,12 +151,7 @@ export class WindowsVaultBackend implements VaultBackend {
   }
 
   async set(key: string, value: string): Promise<void> {
-    if (/[\r\n]/.test(key)) {
-      throw new Error(`Invalid key '${key}': key must not contain newlines`);
-    }
-    if (key !== key.trim()) {
-      throw new Error(`Invalid key '${key}': key must not have leading or trailing whitespace`);
-    }
+    validateKey(key);
     const target = psEscape(`${TARGET_PREFIX}${key}`);
     const script = `
 Add-Type -TypeDefinition @"
@@ -156,6 +168,7 @@ Write-Output "ok"
   }
 
   async get(key: string): Promise<string | null> {
+    validateKey(key);
     const target = psEscape(`${TARGET_PREFIX}${key}`);
     const script = `
 Add-Type -TypeDefinition @"
@@ -173,6 +186,7 @@ Write-Output $val
   }
 
   async delete(key: string): Promise<void> {
+    validateKey(key);
     const target = psEscape(`${TARGET_PREFIX}${key}`);
     const script = `
 Add-Type -TypeDefinition @"

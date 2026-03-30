@@ -1,13 +1,19 @@
 import { detectBackend } from "../vault/detect.ts";
 import { scrub } from "../hook/scrub.ts";
-import { getProjectName, isInGitRepo } from "../utils/git.ts";
 import type { VaultBackend } from "../vault/types.ts";
 
 /**
  * Scrubs every vault secret value from `input`.
  *
- * Retrieves all values stored for the current project namespace and the
- * `global/` namespace, then delegates to `scrub()` from the hook library.
+ * Intentionally retrieves **all** values across every namespace by calling
+ * `backend.list("")`, even though `injectSecrets()` (after fix #42) only
+ * auto-injects keys from `${projectName}/` and `global/` when scoped.
+ *
+ * Scrubbing wider than injection is a deliberate defence-in-depth choice:
+ * secrets from any namespace can end up in subprocess output via placeholders,
+ * manual env assignments, or legacy call sites that do not pass `projectName`.
+ * Limiting scrubbing to the injection scope would create a coverage gap where
+ * those secrets survive unscrubbed into LLM context.
  *
  * **Throws** if the vault is unavailable or any vault operation fails.
  * Previously, vault errors were silently swallowed and the raw (potentially
@@ -28,13 +34,10 @@ export async function scrubOutput(
   // policy. The old catch { return input } was fail-open: it silently returned
   // unscrubbed output (potentially containing live secrets) to the LLM.
   const resolvedBackend = backend ?? (await detectBackend());
-  const project = isInGitRepo() ? getProjectName() : "global";
-  const prefixes =
-    project === "global" ? ["global/"] : [`${project}/`, "global/"];
-  const keysets = await Promise.all(
-    prefixes.map((p) => resolvedBackend.list(p)),
-  );
-  const allKeys = [...new Set(keysets.flat())];
+  // Fetch ALL keys across every namespace so coverage matches injectSecrets(),
+  // which also calls list(""). Using a narrower prefix set (e.g. only project/
+  // and global/) would miss secrets injected from other namespaces.
+  const allKeys = await resolvedBackend.list("");
   const maybeValues = await Promise.all(
     allKeys.map((k) => resolvedBackend.get(k)),
   );

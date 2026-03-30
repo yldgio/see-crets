@@ -1,5 +1,6 @@
 import { injectSecrets, type InjectResult } from "../hook/inject.ts";
 import type { VaultBackend } from "../vault/types.ts";
+import { getProjectName, isInGitRepo } from "../utils/git.ts";
 
 /**
  * Resolves `{{SECRET:key}}` placeholders and optionally auto-injects vault
@@ -13,10 +14,11 @@ import type { VaultBackend } from "../vault/types.ts";
 export async function injectCommand(
   command: string,
   backend?: VaultBackend,
-  options?: { autoInject?: boolean },
+  options?: { autoInject?: boolean; projectName?: string },
 ): Promise<InjectResult> {
   return await injectSecrets(command, backend, {
     autoInject: options?.autoInject ?? true,
+    projectName: options?.projectName,
   });
 }
 
@@ -45,6 +47,7 @@ export async function runInjectCommand(): Promise<void> {
     );
     process.exit(1);
   }
-  const result = await injectCommand(command, undefined, { autoInject });
+  const projectName = isInGitRepo() ? getProjectName() : undefined;
+  const result = await injectCommand(command, undefined, { autoInject, projectName });
   process.stdout.write(JSON.stringify(result) + "\n");
 }

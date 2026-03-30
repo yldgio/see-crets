@@ -2,19 +2,19 @@
 /**
  * see-crets CLI entry point
  *
- * LLM-callable commands (safe — return no secret values):
- *   set <key>     — Human-in-the-loop masked input; stores in OS vault
- *   list          — Key names only, never values
- *   detect        — Vault backend health check
+ * LLM-callable commands (safe â€” return no secret values):
+ *   set <key>     â€” Human-in-the-loop masked input; stores in OS vault
+ *   list          â€” Key names only, never values
+ *   detect        â€” Vault backend health check
  *
- * Human-only commands (destructive — NOT exposed to LLM tool schema):
- *   delete <key>  — Remove a secret from the vault
- *   rotate <key>  — Replace a secret value (masked input, overwrites in place)
- *   purge         — Remove all secrets for the current project namespace
+ * Human-only commands (destructive â€” NOT exposed to LLM tool schema):
+ *   delete <key>  â€” Remove a secret from the vault
+ *   rotate <key>  â€” Replace a secret value (masked input, overwrites in place)
+ *   purge         â€” Remove all secrets for the current project namespace
  *
  * Exit codes:
- *   0 — success
- *   1 — usage error / operation failed
+ *   0 â€” success
+ *   1 â€” usage error / operation failed
  */
 
 import { askSecretSet } from "./tools/ask-secret-set.ts";
@@ -34,14 +34,14 @@ import pkg from "../package.json";
 
 function usage(): never {
   console.error(`
-see-crets — OS-native secret vault for AI agents
+see-crets â€” OS-native secret vault for AI agents
 
-LLM-callable commands (safe — return no secret values):
+LLM-callable commands (safe â€” return no secret values):
   see-crets set <key>        Store a secret (masked input)
   see-crets list             List key names for current project + global
   see-crets detect           Report vault backend health
 
-Human-only commands (destructive — NOT exposed to LLM tools):
+Human-only commands (destructive â€” NOT exposed to LLM tools):
   see-crets delete <key>     Delete a secret from the vault
   see-crets rotate <key>     Replace a secret value (masked input, no delete/re-add)
   see-crets purge            Remove ALL secrets for the current project namespace
@@ -63,7 +63,33 @@ if (cmd === "--version" || cmd === "-v") {
   process.exit(0);
 }
 
-// Parse --project flag — reject duplicate occurrences to avoid positional arg corruption.
+if (cmd === "--help" || cmd === "-h") {
+  console.log(`
+see-crets — OS-native secret vault for AI agents
+
+Usage: see-crets <command> [options]
+
+Commands:
+  set <key>              Store a secret (masked input)
+  list                   List key names for current project + global
+  detect                 Report vault backend health
+  delete <key>           Delete a secret from the vault
+  rotate <key>           Replace a secret value (masked input, no delete/re-add)
+  purge                  Remove ALL secrets for the current project namespace
+  uninstall              Remove the see-crets binary (vault data preserved)
+  upgrade                Self-update to the latest release from GitHub
+
+Options:
+  --version, -v          Print version and exit
+  --help, -h             Show this help message and exit
+  --project <name>       Override the project namespace (default: git root basename)
+  --global               Use the global namespace (alias for --project global)
+  --yes                  Skip confirmation prompts (purge, uninstall)
+`);
+  process.exit(0);
+}
+
+// Parse --project flag â€” reject duplicate occurrences to avoid positional arg corruption.
 const projectIndices = args.reduce<number[]>(
   (acc, a, i) => (a === "--project" ? [...acc, i] : acc),
   []
@@ -78,10 +104,40 @@ if (projectIdx !== -1 && args[projectIdx + 1]) {
   projectFlag = args[projectIdx + 1];
 }
 
+// Parse --global flag - sets projectFlag to "global"; mutually exclusive with --project.
+const globalIndices = args.reduce<number[]>(
+  (acc, a, i) => (a === "--global" ? [...acc, i] : acc),
+  []
+);
+if (globalIndices.length > 1) {
+  console.error("Error: --global may only be specified once.");
+  process.exit(1);
+}
+const globalIdx = globalIndices[0] ?? -1;
+if (globalIdx !== -1) {
+  if (projectIdx !== -1) {
+    console.error("Error: --global and --project are mutually exclusive.");
+    process.exit(1);
+  }
+  projectFlag = "global";
+}
+
+// Parse --yes flag - suppresses confirmation prompts (purge, uninstall).
+const yesIndices = args.reduce<number[]>(
+  (acc, a, i) => (a === "--yes" ? [...acc, i] : acc),
+  []
+);
+if (yesIndices.length > 1) {
+  console.error("Error: --yes may only be specified once.");
+  process.exit(1);
+}
+const yesIdx = yesIndices[0] ?? -1;
+const yesFlag = yesIdx !== -1;
+
 /**
  * Returns positional arguments with supported flag value pairs removed.
- * Currently strips only: --project <name>
- * e.g. ['set', '--project', 'foo', 'my-key'] → ['set', 'my-key']
+ * Strips: --project <name>, --global, --yes
+ * e.g. ['set', '--project', 'foo', 'my-key'] -> ['set', 'my-key']
  */
 function positionalArgs(): string[] {
   const skip = new Set<number>();
@@ -91,6 +147,8 @@ function positionalArgs(): string[] {
       skip.add(projectIdx + 1);
     }
   }
+  if (globalIdx !== -1) skip.add(globalIdx);
+  if (yesIdx !== -1) skip.add(yesIdx);
   return args.filter((_, i) => !skip.has(i));
 }
 
@@ -142,7 +200,7 @@ async function main() {
       const qualifiedKey = resolveKey(key, projectFlag);
       const newValue = await readMaskedInput(`New value for '${qualifiedKey}': `);
       if (!newValue) {
-        console.error(JSON.stringify({ error: "No value entered — secret was NOT rotated." }));
+        console.error(JSON.stringify({ error: "No value entered â€” secret was NOT rotated." }));
         process.exit(1);
       }
       const backend = await detectBackend();
@@ -154,6 +212,19 @@ async function main() {
     case "purge": {
       const project =
         projectFlag ?? (isInGitRepo() ? getProjectName() : "global");
+      if (!yesFlag) {
+        process.stderr.write(
+          `⚠  This will permanently delete all secrets for project '${project}'.
+` +
+          `Type the project name to confirm, or press Enter to abort: `
+        );
+        const { readConfirmLine } = await import("./tools/uninstall-command.ts");
+        const answer = await readConfirmLine();
+        if (answer !== project) {
+          console.log("Aborted.");
+          process.exit(0);
+        }
+      }
       const backend = await detectBackend();
       const result = await purgeSecrets(backend, project);
       console.log(JSON.stringify(result, null, 2));
@@ -197,7 +268,7 @@ async function main() {
 
 main().catch((err) => {
   if (err instanceof CancellationError) {
-    // User pressed Ctrl+C — exit silently with code 1
+    // User pressed Ctrl+C â€” exit silently with code 1
     process.exit(1);
   }
   const msg = err instanceof Error ? err.message : String(err);
