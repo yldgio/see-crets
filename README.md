@@ -71,8 +71,10 @@ curl -fsSL https://raw.githubusercontent.com/yldgio/see-crets/main/install.sh | 
 **Windows (PowerShell)**
 
 ```powershell
-PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex"
+iex (irm 'https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1')
 ```
+
+> **Running from cmd.exe?** Use `PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex"` instead. Note: this spawns a new `powershell.exe` process and may still fail in VS Code or some terminal hosts — open a native PowerShell window if so.
 
 The installer detects your platform, downloads the matching pre-built binary from GitHub Releases, and verifies its SHA-256 checksum before installing. No Bun or Node.js required on the target machine.
 

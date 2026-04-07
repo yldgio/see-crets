@@ -154,8 +154,9 @@ curl -fsSL https://raw.githubusercontent.com/yldgio/see-crets/main/install.sh | 
 
 **Windows (PowerShell)**
 ```powershell
-PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex"
+iex (irm 'https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1')
 ```
+> **From cmd.exe:** `PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex"` — spawns `powershell.exe`; may still fail in VS Code or some terminal hosts.
 
 **Pin a specific version**
 ```bash
@@ -164,7 +165,7 @@ VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yldgio/see-crets/main
 
 Windows equivalent:
 ```powershell
-$env:VERSION='0.1.0'; irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex
+$env:VERSION='0.1.0'; iex (irm 'https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1')
 ```
 
 **Custom install prefix** (Unix only; default is `$HOME/.local/bin`)

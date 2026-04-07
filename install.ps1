@@ -12,10 +12,16 @@
     Optional install directory.  Defaults to "$env:USERPROFILE\.see-crets\bin".
 
 .EXAMPLE
+    # From a PowerShell session (PS 5.1 or 7+):
+    iex (irm 'https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1')
+
+.EXAMPLE
+    # From cmd.exe (spawns powershell.exe — may fail in VS Code or some terminal hosts):
     PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex"
 
 .EXAMPLE
-    $env:VERSION='1.2.3'; irm https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1 | iex
+    # Pin a specific version (from a PowerShell session):
+    $env:VERSION='1.2.3'; iex (irm 'https://raw.githubusercontent.com/yldgio/see-crets/main/install.ps1')
 
 .EXAMPLE
     .\install.ps1 -Prefix C:\tools
