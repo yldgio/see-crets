@@ -38,9 +38,11 @@ footer = """
     https://github.com/yldgio/see-crets/releases/tag/{{ release.version }}
 {% endif %}\
 {% else %}\
-[Unreleased]: \
-    https://github.com/yldgio/see-crets/compare/\
-    {{ release.previous.version if release.previous.version else "HEAD" }}...HEAD
+{% if release.previous.version %}\
+[Unreleased]: https://github.com/yldgio/see-crets/compare/{{ release.previous.version }}...HEAD
+{% else %}\
+[Unreleased]: https://github.com/yldgio/see-crets/compare/HEAD...HEAD
+{% endif %}\
 {% endif %}\
 {% endfor %}
 """
