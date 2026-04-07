@@ -10,6 +10,7 @@
  * variable (`SC_VAL`) so it never appears in process command-line arguments.
  */
 import type { VaultBackend } from "./types.ts";
+import { validateKey } from "./shared.ts";
 
 const TARGET_PREFIX = "see-crets:";
 const CRED_USER = "see-crets";
@@ -125,28 +126,29 @@ function psEscape(s: string): string {
     .replace(/\r/g, "`r");
 }
 
-/** Shared key validation applied by set(), get(), and delete() */
-function validateKey(key: string): void {
-  if (/[\r\n]/.test(key)) {
-    throw new Error(`Invalid key '${key}': key must not contain newlines`);
-  }
-  if (key !== key.trim()) {
-    throw new Error(
-      `Invalid key '${key}': key must not have leading or trailing whitespace`
-    );
-  }
-  if (key.split("/").some((seg) => seg === ".." || seg === ".")) {
-    throw new Error(
-      `Invalid key '${key}': key must not contain path traversal segments`
-    );
-  }
-}
+/** Shared key validation applied by set(), get(), and delete() — imported from shared.ts */
 
 export class WindowsVaultBackend implements VaultBackend {
   readonly name = "Windows Credential Manager";
 
   async isAvailable(): Promise<boolean> {
-    const r = psRun("cmdkey /? 2>&1 | Out-Null; exit $LASTEXITCODE");
+    // Probe by calling CredRead on a sentinel key. Win32 error 1168 (ERROR_NOT_FOUND)
+    // means the API is healthy but the credential simply doesn't exist — that's fine.
+    // Any other outcome (exception, unexpected exit) means the service is unavailable.
+    // NOTE: cmdkey /? was used previously but always exits 1 on Windows (by design),
+    // causing a permanent false-negative.
+    const script = `
+Add-Type -TypeDefinition @"
+${WIN_CRED_TYPE}
+"@
+$ptr = [IntPtr]::Zero
+$ok = [WinCred]::CredRead("see-crets:__probe__", [WinCred]::CRED_TYPE_GENERIC, 0, [ref]$ptr)
+if ($ok) { [WinCred]::CredFree($ptr) }
+$err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+# 1168 = ERROR_NOT_FOUND — API healthy, credential just doesn't exist
+if ($ok -or $err -eq 1168) { exit 0 } else { exit 1 }
+`;
+    const r = psRun(script);
     return r.exitCode === 0;
   }
 
