@@ -245,6 +245,39 @@ see-crets rotate github-token
 # Enter new value for 'my-project/github-token': ****
 ```
 
+### `see-crets upgrade`
+
+Self-update the binary to the latest release from GitHub. Downloads the matching platform binary, verifies its SHA-256 checksum, and atomically replaces the current binary.
+
+```bash
+see-crets upgrade
+# Already on latest (v0.1.0)        ← nothing to do
+# Upgraded v0.1.0 → v0.2.0          ← binary replaced and checksum-verified
+```
+
+Check your current version first:
+
+```bash
+see-crets --version
+```
+
+If [cosign](https://github.com/sigstore/cosign) is installed, provenance is also verified against the GitHub Actions OIDC bundle. Set `COSIGN_ENFORCE=1` to make this check mandatory.
+
+> **Windows note**: the running `.exe` is file-locked. If upgrade fails with a *"Cannot replace the running binary on Windows"* error, it will print the temp file path — manually copy that file over `see-crets.exe` from an Explorer window or a second terminal, then delete the temp file.
+
+### `see-crets uninstall`
+
+Remove the `see-crets` binary. Vault data (secrets stored in your OS keystore) is **not** deleted — only the binary is removed.
+
+```bash
+see-crets uninstall
+# Type 'yes' to confirm removal of /usr/local/bin/see-crets: yes
+
+see-crets uninstall --yes   # skip confirmation prompt (CI / scripts)
+```
+
+To also remove secrets from the vault, run `see-crets purge` first.
+
 ---
 
 ## Secret Namespaces
